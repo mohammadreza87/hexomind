@@ -1,4 +1,4 @@
-import { HexCoordinates, hexToKey, hexEquals } from '../../../../shared/types/hex';
+import { HexCoordinates, hexToKey, HEX_DIRECTIONS } from '../../../../shared/types/hex';
 
 /**
  * Represents the state of a single cell in the grid
@@ -7,6 +7,7 @@ export interface CellState {
   coordinates: HexCoordinates;
   isOccupied: boolean;
   pieceId?: string;
+  pieceColorIndex?: number; // Store the color index of the piece
   cellColor?: string;
 }
 
@@ -60,6 +61,27 @@ export class GridModel {
   }
 
   /**
+   * Get all cells as an array
+   */
+  getAllCells(): CellState[] {
+    return Array.from(this.cells.values());
+  }
+
+  /**
+   * Get neighbors (up to 6) for a coordinate within grid bounds
+   */
+  getNeighbors(coords: HexCoordinates): HexCoordinates[] {
+    const neighbors: HexCoordinates[] = [];
+    for (const dir of HEX_DIRECTIONS) {
+      const n = { q: coords.q + dir.q, r: coords.r + dir.r };
+      if (this.isValidCoordinate(n)) {
+        neighbors.push(n);
+      }
+    }
+    return neighbors;
+  }
+
+  /**
    * Check if coordinates are valid within grid bounds
    */
   isValidCoordinate(coords: HexCoordinates): boolean {
@@ -69,6 +91,13 @@ export class GridModel {
       Math.abs(coords.r) <= this.radius &&
       Math.abs(s) <= this.radius
     );
+  }
+
+  /**
+   * Alias for isValidCoordinate for compatibility
+   */
+  isValidCell(coords: HexCoordinates): boolean {
+    return this.isValidCoordinate(coords);
   }
 
   /**
@@ -82,12 +111,13 @@ export class GridModel {
   /**
    * Set cell occupation status
    */
-  setCellOccupied(coords: HexCoordinates, occupied: boolean, pieceId?: string): boolean {
+  setCellOccupied(coords: HexCoordinates, occupied: boolean, pieceId?: string, colorIndex?: number): boolean {
     const cell = this.getCell(coords);
     if (!cell) return false;
 
     cell.isOccupied = occupied;
     cell.pieceId = occupied ? pieceId : undefined;
+    cell.pieceColorIndex = occupied ? colorIndex : undefined;
     return true;
   }
 
@@ -227,6 +257,58 @@ export class GridModel {
   }
 
   /**
+   * Check if a line would be complete with additional cells occupied
+   */
+  public wouldLineBeComplete(line: HexCoordinates[], additionalCells: HexCoordinates[]): boolean {
+    if (line.length === 0) return false;
+
+    // Create a temporary set of additional cells for faster lookup
+    const additionalSet = new Set(additionalCells.map(c => hexToKey(c)));
+
+    for (const coords of line) {
+      const key = hexToKey(coords);
+      // Check if cell is either already occupied or would be occupied by placement
+      if (!this.isCellOccupied(coords) && !additionalSet.has(key)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Detect which lines would be completed if certain cells were occupied
+   */
+  public detectPotentialCompleteLines(additionalCells: HexCoordinates[]): Line[] {
+    const completeLines: Line[] = [];
+
+    // Check horizontal lines (constant r)
+    for (let r = -this.radius; r <= this.radius; r++) {
+      const line = this.getHorizontalLine(r);
+      if (this.wouldLineBeComplete(line, additionalCells)) {
+        completeLines.push({ cells: line, direction: 'horizontal' });
+      }
+    }
+
+    // Check diagonal lines NE-SW (constant q)
+    for (let q = -this.radius; q <= this.radius; q++) {
+      const line = this.getDiagonalLineNESW(q);
+      if (this.wouldLineBeComplete(line, additionalCells)) {
+        completeLines.push({ cells: line, direction: 'diagonalNESW' });
+      }
+    }
+
+    // Check diagonal lines NW-SE (constant s = -q - r)
+    for (let s = -this.radius; s <= this.radius; s++) {
+      const line = this.getDiagonalLineNWSE(s);
+      if (this.wouldLineBeComplete(line, additionalCells)) {
+        completeLines.push({ cells: line, direction: 'diagonalNWSE' });
+      }
+    }
+
+    return completeLines;
+  }
+
+  /**
    * Clear lines from the grid
    */
   clearLines(lines: Line[]): Set<string> {
@@ -311,6 +393,7 @@ export class GridModel {
         coordinates: { ...cell.coordinates },
         isOccupied: cell.isOccupied,
         pieceId: cell.pieceId,
+        pieceColorIndex: cell.pieceColorIndex,
         cellColor: cell.cellColor
       });
     }

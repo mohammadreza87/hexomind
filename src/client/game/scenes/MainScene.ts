@@ -1,17 +1,22 @@
 import * as Phaser from 'phaser';
 import { BoardRenderer } from '../presentation/board/BoardRenderer';
-import { ThemeProvider } from '../presentation/theme/ThemeProvider';
+import { NeonThemeProvider } from '../presentation/theme/NeonThemeProvider';
 import { PieceGenerationService } from '../core/services/PieceGenerationService';
 import { PieceModel } from '../core/models/PieceModel';
 import { HexCoordinates } from '../../../shared/types/hex';
+import { PieceTray } from '../presentation/pieces/PieceTray';
+import { PlacementValidator } from '../core/services/PlacementValidator';
+import { RenderConfig } from '../config/RenderConfig';
 
 /**
  * MainScene - The main and only game scene for Hexomind
  */
 export class MainScene extends Phaser.Scene {
   private boardRenderer!: BoardRenderer;
-  private themeProvider!: ThemeProvider;
+  private themeProvider!: NeonThemeProvider;
   private pieceGenerator!: PieceGenerationService;
+  private pieceTray!: PieceTray;
+  private placementValidator!: PlacementValidator;
 
   // UI Elements
   private scoreText!: Phaser.GameObjects.Text;
@@ -21,19 +26,40 @@ export class MainScene extends Phaser.Scene {
   private score: number = 0;
   private highScore: number = 0;
   private currentPieces: PieceModel[] = [];
+  private draggedPiece: PieceModel | null = null;
+  private draggedRenderer: any = null; // Store the renderer for positioning
+  private previewCells: HexCoordinates[] = [];
 
   constructor() {
     super({ key: 'MainScene' });
   }
 
   preload(): void {
-    // Load any assets here if needed
-    // For now, we're using only graphics primitives
+    // Load hexagon PNG images if enabled
+    if (RenderConfig.USE_PNG_HEXAGONS) {
+      this.load.image(RenderConfig.TEXTURE_KEYS.HEX_EMPTY, RenderConfig.ASSETS.HEX_EMPTY);
+      this.load.image(RenderConfig.TEXTURE_KEYS.HEX_FILLED, RenderConfig.ASSETS.HEX_FILLED);
+      this.load.image(RenderConfig.TEXTURE_KEYS.HEX_PIECE, RenderConfig.ASSETS.HEX_PIECE);
+
+      // Show loading progress
+      this.load.on('progress', (value: number) => {
+        console.log('Loading:', Math.round(value * 100) + '%');
+      });
+
+      this.load.on('complete', () => {
+        console.log('Assets loaded successfully');
+      });
+    } else {
+      // Using programmatic graphics
+    }
   }
 
   create(): void {
+    // Use subpixel rendering for smoother AA on vector graphics
+    this.cameras.main.roundPixels = false;
+
     // Initialize theme provider
-    this.themeProvider = new ThemeProvider();
+    this.themeProvider = new NeonThemeProvider();
 
     // Set background based on theme
     const theme = this.themeProvider.getPhaserTheme();
@@ -42,11 +68,15 @@ export class MainScene extends Phaser.Scene {
     // Create the board
     this.boardRenderer = new BoardRenderer(this);
 
-    // Initialize piece generator
+    // Initialize services
     this.pieceGenerator = new PieceGenerationService({
       guaranteeSolvability: true,
       useAdaptiveSizing: true
     });
+    this.placementValidator = new PlacementValidator();
+
+    // Create piece tray
+    this.pieceTray = new PieceTray(this, this.themeProvider);
 
     // Create UI
     this.createUI();
@@ -71,29 +101,29 @@ export class MainScene extends Phaser.Scene {
    */
   private createUI(): void {
     const theme = this.themeProvider.getTheme();
-    const { width } = this.cameras.main;
+    const { width, height } = this.cameras.main;
 
-    // Score display
-    this.scoreText = this.add.text(20, 20, 'Score: 0', {
-      fontSize: '32px',
-      fontFamily: 'system-ui, -apple-system, sans-serif',
-      fontWeight: 'bold',
-      color: this.themeProvider.toCSS(theme.textPrimary)
-    }).setDepth(100);
-
-    // High score display
-    this.highScoreText = this.add.text(width - 20, 20, 'Best: 0', {
-      fontSize: '24px',
-      fontFamily: 'system-ui, -apple-system, sans-serif',
-      color: this.themeProvider.toCSS(theme.textSecondary)
-    }).setOrigin(1, 0).setDepth(100);
-
-    // Title
+    // Title at top
     this.add.text(width / 2, 30, 'HEXOMIND', {
-      fontSize: '42px',
-      fontFamily: 'system-ui, -apple-system, sans-serif',
-      fontWeight: '900',
+      fontSize: '36px',
+      fontFamily: '"Lilita One", "Comic Sans MS", cursive',
+      fontStyle: 'bold',
       color: this.themeProvider.toCSS(theme.textPrimary)
+    }).setOrigin(0.5, 0.5).setDepth(100);
+
+    // Score display - smaller and above grid
+    this.scoreText = this.add.text(width / 2, height * 0.12, 'Score: 0', {
+      fontSize: '24px',
+      fontFamily: '"Lilita One", "Comic Sans MS", cursive',
+      fontStyle: 'bold',
+      color: this.themeProvider.toCSS(theme.textPrimary)
+    }).setOrigin(0.5, 0.5).setDepth(100);
+
+    // High score display - smaller
+    this.highScoreText = this.add.text(width / 2, height * 0.16, 'Best: 0', {
+      fontSize: '18px',
+      fontFamily: '"Lilita One", "Comic Sans MS", cursive',
+      color: this.themeProvider.toCSS(theme.textSecondary)
     }).setOrigin(0.5, 0.5).setDepth(100);
   }
 
@@ -101,19 +131,28 @@ export class MainScene extends Phaser.Scene {
    * Setup game interactions
    */
   private setupInteractions(): void {
-    // Listen for board cell clicks
-    this.events.on('board:cellClicked', (coords: HexCoordinates) => {
-      this.handleCellClick(coords);
+    // Piece drag events
+    this.events.on('piece:dragstart', (piece: PieceModel, pointer: Phaser.Input.Pointer, renderer: any) => {
+      this.draggedPiece = piece;
+      this.draggedRenderer = renderer;
+      this.updatePreview(pointer);
     });
 
-    // Handle pointer events for piece placement
-    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      // This will be used for drag and drop later
-      const coords = this.boardRenderer.pixelToHex(pointer.x, pointer.y);
-      if (coords) {
-        // Temporary: just toggle cell for testing
-        this.handleCellClick(coords);
-      }
+    this.events.on('piece:drag', (piece: PieceModel, pointer: Phaser.Input.Pointer) => {
+      this.updatePreview(pointer);
+    });
+
+    this.events.on('piece:dragend', (piece: PieceModel, pointer: Phaser.Input.Pointer, renderer: any, callback: (placed: boolean) => void) => {
+      const placed = this.attemptPlacement(pointer, renderer);
+      callback(placed);
+      this.draggedPiece = null;
+      this.draggedRenderer = null;
+      this.clearPreview();
+    });
+
+    // Tray empty event
+    this.events.on('tray:empty', () => {
+      this.generateNewPieces();
     });
   }
 
@@ -142,20 +181,99 @@ export class MainScene extends Phaser.Scene {
     const grid = this.boardRenderer.getGridModel();
     this.currentPieces = this.pieceGenerator.generatePieceSet(grid, 3);
 
-    // TODO: Display pieces in the piece tray area
-    // For now, just log them
-    console.log('Generated pieces:', this.currentPieces);
+
+    // Display pieces in the tray
+    this.pieceTray.setPieces(this.currentPieces);
   }
 
   /**
-   * Handle cell click (temporary for testing)
+   * Update preview while dragging
    */
-  private handleCellClick(coords: HexCoordinates): void {
-    const grid = this.boardRenderer.getGridModel();
-    const isOccupied = grid.isCellOccupied(coords);
+  private updatePreview(pointer: Phaser.Input.Pointer): void {
+    if (!this.draggedPiece) return;
 
-    // Toggle cell state
-    grid.setCellOccupied(coords, !isOccupied, 'manual');
+    // Clear previous preview
+    this.clearPreview();
+
+    // Get board position from pointer
+    const boardCoords = this.boardRenderer.pixelToHex(pointer.x, pointer.y);
+    if (!boardCoords) return;
+
+    // Calculate piece position relative to board
+    const placement = this.placementValidator.getPlacementCells(
+      this.draggedPiece,
+      boardCoords
+    );
+
+    // Check if placement is valid
+    const grid = this.boardRenderer.getGridModel();
+    const isValid = this.placementValidator.canPlacePiece(
+      this.draggedPiece,
+      boardCoords,
+      grid
+    );
+
+    // Show preview on board with color index for correct color
+    this.previewCells = placement;
+    this.boardRenderer.showPlacementPreview(placement, isValid, this.draggedPiece.getColorIndex());
+  }
+
+  /**
+   * Clear placement preview
+   */
+  private clearPreview(): void {
+    this.boardRenderer.clearPlacementPreview();
+    this.previewCells = [];
+  }
+
+  /**
+   * Attempt to place piece
+   */
+  private attemptPlacement(pointer: Phaser.Input.Pointer, renderer: any): boolean {
+    if (!this.draggedPiece) return false;
+
+    // Get board position
+    const boardCoords = this.boardRenderer.pixelToHex(pointer.x, pointer.y);
+    if (!boardCoords) return false;
+
+    // Check if placement is valid
+    const grid = this.boardRenderer.getGridModel();
+    const canPlace = this.placementValidator.canPlacePiece(
+      this.draggedPiece,
+      boardCoords,
+      grid
+    );
+
+    if (!canPlace) return false;
+
+    // Place the piece
+    const placement = this.placementValidator.getPlacementCells(
+      this.draggedPiece,
+      boardCoords
+    );
+
+    placement.forEach(coord => {
+      grid.setCellOccupied(coord, true, this.draggedPiece.getId(), this.draggedPiece.getColorIndex());
+    });
+
+    // Remove the dragged piece visual (it will be shown by the board cells)
+    if (renderer && renderer.getContainer) {
+      const container = renderer.getContainer();
+      // First remove all listeners and interactivity
+      if (container.input) {
+        container.removeInteractive();
+      }
+      container.removeAllListeners();
+      // Now safely destroy
+      container.destroy();
+    }
+
+    // Force board to re-render to show placed pieces
+    this.boardRenderer.updateBoard();
+
+    // Calculate points
+    const piecePoints = placement.length * 10;
+    this.updateScore(piecePoints);
 
     // Check for complete lines
     const lines = grid.detectCompleteLines();
@@ -163,16 +281,37 @@ export class MainScene extends Phaser.Scene {
       this.handleLineCompletion(lines);
     }
 
-    // Update score
-    if (!isOccupied) {
-      this.updateScore(10);
-    }
+    // Success effect
+    this.showPlacementEffect(boardCoords);
+
+    return true;
+  }
+
+  /**
+   * Show placement effect
+   */
+  private showPlacementEffect(coords: HexCoordinates): void {
+    const pos = this.boardRenderer.hexToPixel(coords);
+    if (!pos) return;
+
+    // Create pulse effect
+    const circle = this.add.circle(pos.x, pos.y, 10, 0xffffff, 0.8);
+    circle.setDepth(150);
+
+    this.tweens.add({
+      targets: circle,
+      scale: 3,
+      alpha: 0,
+      duration: 400,
+      ease: 'Power2',
+      onComplete: () => circle.destroy()
+    });
   }
 
   /**
    * Handle line completion
    */
-  private handleLineCompletion(lines: any[]): void {
+  private async handleLineCompletion(lines: any[]): Promise<void> {
     const grid = this.boardRenderer.getGridModel();
 
     // Calculate points
@@ -183,8 +322,8 @@ export class MainScene extends Phaser.Scene {
     // Update score
     this.updateScore(totalPoints);
 
-    // Clear lines
-    grid.clearLines(lines);
+    // Animate the line clearing with smooth wave effect
+    await this.boardRenderer.animateLineClear(lines);
 
     // Visual feedback
     this.showLinesClearedEffect(lines.length, totalPoints);
@@ -247,48 +386,45 @@ export class MainScene extends Phaser.Scene {
       comboText = `${lineCount}x COMBO!`;
     }
 
-    const effectText = this.add.text(width / 2, height / 2 - 50, comboText, {
-      fontSize: '48px',
-      fontFamily: 'system-ui, -apple-system, sans-serif',
-      fontWeight: '900',
+    const effectText = this.add.text(width / 2, height / 2 - 30, comboText, {
+      fontSize: '32px',
+      fontFamily: '"Lilita One", "Comic Sans MS", cursive',
+      fontStyle: 'bold',
       color: this.themeProvider.toCSS(theme.scoreBonus)
     }).setOrigin(0.5).setAlpha(0).setDepth(200);
 
-    const pointsText = this.add.text(width / 2, height / 2, `+${points}`, {
-      fontSize: '36px',
-      fontFamily: 'system-ui, -apple-system, sans-serif',
-      fontWeight: 'bold',
+    const pointsText = this.add.text(width / 2, height / 2 + 10, `+${points}`, {
+      fontSize: '24px',
+      fontFamily: '"Lilita One", "Comic Sans MS", cursive',
+      fontStyle: 'bold',
       color: this.themeProvider.toCSS(theme.scorePrimary)
     }).setOrigin(0.5).setAlpha(0).setDepth(200);
 
     // Animate in
-    const timeline = this.tweens.createTimeline();
-
-    timeline.add({
+    this.tweens.add({
       targets: [effectText, pointsText],
       alpha: 1,
       scale: { from: 0.5, to: 1 },
       duration: 300,
-      ease: 'Back.easeOut'
-    });
-
-    timeline.add({
-      targets: [effectText, pointsText],
-      alpha: 0,
-      y: '-=50',
-      duration: 500,
-      delay: 1000,
-      ease: 'Power2',
+      ease: 'Back.easeOut',
       onComplete: () => {
-        effectText.destroy();
-        pointsText.destroy();
+        // Animate out after delay
+        this.tweens.add({
+          targets: [effectText, pointsText],
+          alpha: 0,
+          y: '-=50',
+          duration: 500,
+          delay: 1000,
+          ease: 'Power2',
+          onComplete: () => {
+            effectText.destroy();
+            pointsText.destroy();
+          }
+        });
       }
     });
 
-    timeline.play();
-
-    // Screen flash
-    this.cameras.main.flash(200, 255, 255, 255, false);
+    // Removed screen flash for cleaner animation
   }
 
   /**

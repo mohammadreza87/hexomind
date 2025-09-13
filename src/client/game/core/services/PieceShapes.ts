@@ -1,5 +1,6 @@
 import { PieceShape } from '../models/PieceModel';
 import { HexCoordinates } from '../../../../shared/types/hex';
+import { RNG } from './RNG';
 
 /**
  * Predefined piece shapes for the game.
@@ -27,7 +28,7 @@ export class PieceShapes {
     category: 'single'
   };
 
-  // Small pieces (2-3 hexes)
+  // Small pieces (2-3 hexes) - all within radius 1
   static readonly DOUBLE_HORIZONTAL: PieceShape = {
     id: 'double_h',
     name: 'Double Horizontal',
@@ -50,18 +51,6 @@ export class PieceShapes {
     category: 'small'
   };
 
-  static readonly TRIPLE_LINE: PieceShape = {
-    id: 'triple_line',
-    name: 'Triple Line',
-    cells: [
-      { q: -1, r: 0 },
-      { q: 0, r: 0 },
-      { q: 1, r: 0 }
-    ],
-    color: PieceShapes.COLORS.red,
-    category: 'small'
-  };
-
   static readonly TRIPLE_V: PieceShape = {
     id: 'triple_v',
     name: 'Triple V',
@@ -69,6 +58,18 @@ export class PieceShapes {
       { q: 0, r: 0 },
       { q: 1, r: -1 },
       { q: 1, r: 0 }
+    ],
+    color: PieceShapes.COLORS.red,
+    category: 'small'
+  };
+
+  static readonly TRIPLE_L: PieceShape = {
+    id: 'triple_l',
+    name: 'Triple L',
+    cells: [
+      { q: 0, r: 0 },
+      { q: 1, r: 0 },
+      { q: 0, r: 1 }
     ],
     color: PieceShapes.COLORS.yellow,
     category: 'small'
@@ -86,62 +87,74 @@ export class PieceShapes {
     category: 'small'
   };
 
-  // Medium pieces (4-5 hexes)
-  static readonly QUAD_LINE: PieceShape = {
-    id: 'quad_line',
-    name: 'Quad Line',
+  static readonly TRIPLE_LINE: PieceShape = {
+    id: 'triple_line',
+    name: 'Triple Line',
     cells: [
-      { q: -1, r: 0 },
+      { q: 0, r: 0 },
+      { q: 0, r: -1 },
+      { q: 0, r: 1 }
+    ],
+    color: PieceShapes.COLORS.cyan,
+    category: 'small'
+  };
+
+  // Medium pieces (4-5 hexes) - all within radius 1
+  static readonly QUAD_DIAMOND: PieceShape = {
+    id: 'quad_diamond',
+    name: 'Quad Diamond',
+    cells: [
       { q: 0, r: 0 },
       { q: 1, r: 0 },
-      { q: 2, r: 0 }
+      { q: 0, r: 1 },
+      { q: -1, r: 1 }
     ],
     color: PieceShapes.COLORS.orange,
     category: 'medium'
   };
 
-  static readonly QUAD_SQUARE: PieceShape = {
-    id: 'quad_square',
-    name: 'Quad Square',
+  static readonly QUAD_STAR: PieceShape = {
+    id: 'quad_star',
+    name: 'Quad Star',
     cells: [
       { q: 0, r: 0 },
-      { q: 1, r: 0 },
+      { q: 1, r: -1 },
       { q: 0, r: 1 },
-      { q: 1, r: -1 }
+      { q: -1, r: 0 }
     ],
     color: PieceShapes.COLORS.pink,
     category: 'medium'
   };
 
-  static readonly QUAD_L: PieceShape = {
-    id: 'quad_l',
-    name: 'Quad L',
+  static readonly QUAD_C: PieceShape = {
+    id: 'quad_c',
+    name: 'Quad C',
     cells: [
       { q: 0, r: 0 },
       { q: 1, r: 0 },
-      { q: 2, r: 0 },
+      { q: -1, r: 1 },
       { q: 0, r: 1 }
     ],
     color: PieceShapes.COLORS.blue,
     category: 'medium'
   };
 
-  static readonly QUAD_Z: PieceShape = {
-    id: 'quad_z',
-    name: 'Quad Z',
+  static readonly QUAD_Y: PieceShape = {
+    id: 'quad_y',
+    name: 'Quad Y',
     cells: [
       { q: 0, r: 0 },
       { q: 1, r: 0 },
-      { q: 1, r: -1 },
-      { q: 2, r: -1 }
+      { q: 0, r: -1 },
+      { q: -1, r: 1 }
     ],
     color: PieceShapes.COLORS.green,
     category: 'medium'
   };
 
-  static readonly PENTA_CROSS: PieceShape = {
-    id: 'penta_cross',
-    name: 'Penta Cross',
+  static readonly PENTA_PLUS: PieceShape = {
+    id: 'penta_plus',
+    name: 'Penta Plus',
     cells: [
       { q: 0, r: 0 },
       { q: -1, r: 0 },
@@ -153,46 +166,46 @@ export class PieceShapes {
     category: 'medium'
   };
 
-  static readonly PENTA_ARROW: PieceShape = {
-    id: 'penta_arrow',
-    name: 'Penta Arrow',
+  static readonly PENTA_FLOWER: PieceShape = {
+    id: 'penta_flower',
+    name: 'Penta Flower',
     cells: [
       { q: 0, r: 0 },
       { q: 1, r: 0 },
-      { q: 2, r: 0 },
-      { q: 1, r: -1 },
-      { q: 1, r: 1 }
+      { q: 0, r: 1 },
+      { q: -1, r: 1 },
+      { q: -1, r: 0 }
     ],
     color: PieceShapes.COLORS.yellow,
     category: 'medium'
   };
 
-  // Large pieces (6-7 hexes)
-  static readonly HEXA_LINE: PieceShape = {
-    id: 'hexa_line',
-    name: 'Hexa Line',
+  // Large pieces (6-7 hexes) - all within radius 1
+  static readonly HEXA_RING: PieceShape = {
+    id: 'hexa_ring',
+    name: 'Hexa Ring',
     cells: [
-      { q: -2, r: 0 },
-      { q: -1, r: 0 },
-      { q: 0, r: 0 },
       { q: 1, r: 0 },
-      { q: 2, r: 0 },
-      { q: 3, r: 0 }
+      { q: 0, r: 1 },
+      { q: -1, r: 1 },
+      { q: -1, r: 0 },
+      { q: 0, r: -1 },
+      { q: 1, r: -1 }
     ],
     color: PieceShapes.COLORS.purple,
     category: 'large'
   };
 
-  static readonly HEXA_FLOWER: PieceShape = {
-    id: 'hexa_flower',
-    name: 'Hexa Flower',
+  static readonly HEXA_STAR: PieceShape = {
+    id: 'hexa_star',
+    name: 'Hexa Star',
     cells: [
       { q: 0, r: 0 },
       { q: 1, r: 0 },
       { q: 0, r: 1 },
       { q: -1, r: 1 },
       { q: -1, r: 0 },
-      { q: 0, r: -1 }
+      { q: 1, r: -1 }
     ],
     color: PieceShapes.COLORS.orange,
     category: 'large'
@@ -222,17 +235,18 @@ export class PieceShapes {
       this.SINGLE,
       this.DOUBLE_HORIZONTAL,
       this.DOUBLE_DIAGONAL,
-      this.TRIPLE_LINE,
       this.TRIPLE_V,
+      this.TRIPLE_L,
       this.TRIPLE_TRIANGLE,
-      this.QUAD_LINE,
-      this.QUAD_SQUARE,
-      this.QUAD_L,
-      this.QUAD_Z,
-      this.PENTA_CROSS,
-      this.PENTA_ARROW,
-      this.HEXA_LINE,
-      this.HEXA_FLOWER,
+      this.TRIPLE_LINE,
+      this.QUAD_DIAMOND,
+      this.QUAD_STAR,
+      this.QUAD_C,
+      this.QUAD_Y,
+      this.PENTA_PLUS,
+      this.PENTA_FLOWER,
+      this.HEXA_RING,
+      this.HEXA_STAR,
       this.HEPTA_FULL
     ];
   }
@@ -256,28 +270,37 @@ export class PieceShapes {
   /**
    * Get a random shape from all available shapes
    */
-  static getRandomShape(): PieceShape {
+  static getRandomShape(rng?: RNG): PieceShape {
     const shapes = this.getAllShapes();
+    if (rng) return rng.pick(shapes);
     return shapes[Math.floor(Math.random() * shapes.length)];
   }
 
   /**
    * Get a random shape from specific categories
    */
-  static getRandomShapeFromCategories(...categories: PieceShape['category'][]): PieceShape | null {
+  static getRandomShapeFromCategories(
+    ...args: [...categories: PieceShape['category'][]]
+  ): PieceShape | null {
+    // Support optional rng as last argument
+    const last = args[args.length - 1] as unknown;
+    const rng = last instanceof RNG ? (args.pop() as unknown as RNG) : undefined;
+    const categories = args as PieceShape['category'][];
     const shapes = this.getAllShapes().filter(shape =>
       categories.includes(shape.category)
     );
 
     if (shapes.length === 0) return null;
+    if (rng) return rng.pick(shapes);
     return shapes[Math.floor(Math.random() * shapes.length)];
   }
 
   /**
    * Generate a random color from the palette
    */
-  static getRandomColor(): string {
+  static getRandomColor(rng?: RNG): string {
     const colors = Object.values(this.COLORS);
+    if (rng) return rng.pick(colors);
     return colors[Math.floor(Math.random() * colors.length)];
   }
 
@@ -311,17 +334,30 @@ export class PieceShapes {
   }
 
   /**
-   * Generate a random procedural shape
+   * Generate a random procedural shape within radius 1
    */
-  static generateProceduralShape(maxSize: number = 5): PieceShape {
+  static generateProceduralShape(maxSize: number = 7, rng?: RNG): PieceShape {
     const cells: HexCoordinates[] = [{ q: 0, r: 0 }]; // Start with center
     const visited = new Set<string>();
     visited.add('0,0');
 
-    const targetSize = Math.floor(Math.random() * (maxSize - 1)) + 2; // 2 to maxSize
+    // Ensure we don't exceed 7 cells (radius 1 limit)
+    const rnd = rng ? rng.random() : Math.random();
+    const targetSize = Math.min(Math.floor(rnd * (maxSize - 1)) + 2, 7);
+
+    // Valid positions within radius 1
+    const validPositions = [
+      { q: 0, r: 0 },   // Center
+      { q: 1, r: 0 },   // Right
+      { q: 1, r: -1 },  // Top-right
+      { q: 0, r: -1 },  // Top-left
+      { q: -1, r: 0 },  // Left
+      { q: -1, r: 1 },  // Bottom-left
+      { q: 0, r: 1 }    // Bottom-right
+    ];
 
     while (cells.length < targetSize) {
-      // Get all possible neighbors
+      // Get all possible neighbors within radius 1
       const candidates: HexCoordinates[] = [];
 
       for (const cell of cells) {
@@ -336,7 +372,9 @@ export class PieceShapes {
 
         for (const neighbor of neighbors) {
           const key = `${neighbor.q},${neighbor.r}`;
-          if (!visited.has(key)) {
+          // Check if within radius 1 and not visited
+          const isValid = validPositions.some(p => p.q === neighbor.q && p.r === neighbor.r);
+          if (isValid && !visited.has(key)) {
             candidates.push(neighbor);
           }
         }
@@ -345,7 +383,7 @@ export class PieceShapes {
       if (candidates.length === 0) break;
 
       // Pick a random candidate
-      const newCell = candidates[Math.floor(Math.random() * candidates.length)];
+      const newCell = rng ? rng.pick(candidates) : candidates[Math.floor(Math.random() * candidates.length)];
       cells.push(newCell);
       visited.add(`${newCell.q},${newCell.r}`);
     }

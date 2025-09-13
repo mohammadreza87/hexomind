@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import { ThemeProvider } from '../theme/ThemeProvider';
+import { NeonThemeProvider } from '../theme/NeonThemeProvider';
 
 /**
  * HexagonRenderer - Specialized renderer for hexagonal shapes
@@ -8,12 +8,12 @@ import { ThemeProvider } from '../theme/ThemeProvider';
  * and performance optimizations.
  */
 export class HexagonRenderer {
-  private themeProvider: ThemeProvider;
+  private themeProvider: NeonThemeProvider;
 
   // Cached calculations
   private cachedPoints: Map<number, Phaser.Math.Vector2[]> = new Map();
 
-  constructor(themeProvider: ThemeProvider) {
+  constructor(themeProvider: NeonThemeProvider) {
     this.themeProvider = themeProvider;
   }
 
@@ -56,8 +56,8 @@ export class HexagonRenderer {
   ): void {
     const points = this.getHexPoints(size);
 
-    // Set styles
-    graphics.lineStyle(1.5, borderColor, borderAlpha);
+    // 1px border with AA for clean, non-jagged edges
+    graphics.lineStyle(1, borderColor, borderAlpha);
     graphics.fillStyle(fillColor, fillAlpha);
 
     // Begin path
@@ -396,6 +396,36 @@ export class HexagonRenderer {
     const b = Math.round(b1 + (b2 - b1) * t);
 
     return (r << 16) | (g << 8) | b;
+  }
+
+  /**
+   * Draw just the outline of a hexagon
+   */
+  drawHexagonOutline(
+    graphics: Phaser.GameObjects.Graphics,
+    x: number,
+    y: number,
+    size: number,
+    color?: number,
+    lineWidth: number = 2,
+    alpha: number = 1
+  ): void {
+    const points = this.getHexPoints(size);
+
+    // Use current line style if no color specified
+    if (color !== undefined) {
+      graphics.lineStyle(lineWidth, color, alpha);
+    }
+
+    graphics.beginPath();
+    graphics.moveTo(x + points[0].x, y + points[0].y);
+
+    for (let i = 1; i < points.length; i++) {
+      graphics.lineTo(x + points[i].x, y + points[i].y);
+    }
+
+    graphics.closePath();
+    graphics.strokePath();
   }
 
   /**

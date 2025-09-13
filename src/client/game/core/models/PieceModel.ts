@@ -20,10 +20,14 @@ export class PieceModel {
   private shape: PieceShape;
   private currentRotation: number = 0; // 0, 60, 120, 180, 240, 300 degrees
   private position: HexCoordinates | null = null;
+  private colorIndex: number; // Index for consistent color from palette
 
-  constructor(shape: PieceShape) {
-    this.id = `piece_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  constructor(shape: PieceShape, colorIndex?: number, rng?: () => number) {
+    const rand = rng ?? Math.random;
+    this.id = `piece_${Date.now()}_${rand().toString(36).substr(2, 9)}`;
     this.shape = { ...shape };
+    // Assign a random color index if not provided
+    this.colorIndex = colorIndex ?? Math.floor((rand()) * 8);
   }
 
   /**
@@ -45,6 +49,20 @@ export class PieceModel {
    */
   getColor(): string {
     return this.shape.color;
+  }
+
+  /**
+   * Get color index for this piece
+   */
+  getColorIndex(): number {
+    return this.colorIndex;
+  }
+
+  /**
+   * Set color index for this piece
+   */
+  setColorIndex(index: number): void {
+    this.colorIndex = index;
   }
 
   /**
@@ -202,7 +220,7 @@ export class PieceModel {
       cells: this.shape.cells.map(cell => ({ ...cell }))
     };
 
-    const cloned = new PieceModel(clonedShape);
+    const cloned = new PieceModel(clonedShape, this.colorIndex);
     cloned.currentRotation = this.currentRotation;
     cloned.position = this.position ? { ...this.position } : null;
     cloned.id = this.id; // Keep same ID for clones

@@ -20,7 +20,8 @@
     "login": "devvit login --copy-paste",
     "launch": "npm run build && npm run deploy && devvit publish",
     "prettier": "prettier-package-json --write ./package.json && prettier --write .",
-    "type-check": "tsc --build"
+    "type-check": "tsc --build",
+    "test": "vitest run"
   },
   "dependencies": {
     "@devvit/web": "0.12.0",

@@ -2,6 +2,7 @@ import { PieceModel, PieceShape } from '../models/PieceModel';
 import { GridModel } from '../models/GridModel';
 import { PieceShapes } from './PieceShapes';
 import { PuzzleValidator } from './PuzzleValidator';
+import { RNG } from './RNG';
 
 /**
  * Configuration for piece generation
@@ -24,14 +25,15 @@ export interface GenerationConfig {
 export class PieceGenerationService {
   private config: GenerationConfig;
   private puzzleValidator: PuzzleValidator;
+  private rng: RNG;
 
-  constructor(config?: Partial<GenerationConfig>) {
+  constructor(config?: Partial<GenerationConfig>, seed?: number | string, rng?: RNG) {
     this.config = {
       useProceduralGeneration: false,
       useAdaptiveSizing: true,
-      maxRadiusEarlyGame: 5,
+      maxRadiusEarlyGame: 7,  // Max 7 cells (radius 1)
       maxRadiusLateGame: 3,
-      maxHexagonCount: 7,
+      maxHexagonCount: 7,     // Never exceed radius 1 (7 cells max)
       adaptiveThreshold: 0.6,
       guaranteeSolvability: true,
       maxGenerationAttempts: 100,
@@ -39,6 +41,7 @@ export class PieceGenerationService {
     };
 
     this.puzzleValidator = new PuzzleValidator();
+    this.rng = rng ?? new RNG(seed ?? Date.now());
   }
 
   /**
@@ -79,7 +82,9 @@ export class PieceGenerationService {
 
     for (let i = 0; i < count; i++) {
       const shape = this.selectShapeForGridState(gridFullness);
-      pieces.push(new PieceModel(shape));
+      // Provide deterministic color index via rng
+      const colorIndex = Math.floor(this.rng.random() * 8);
+      pieces.push(new PieceModel(shape, colorIndex, () => this.rng.random()));
     }
 
     return pieces;
@@ -94,7 +99,7 @@ export class PieceGenerationService {
     if (this.config.useProceduralGeneration) {
       // Generate procedural shape with size based on grid state
       const maxSize = this.getMaxSizeForFullness(gridFullness);
-      shape = PieceShapes.generateProceduralShape(maxSize);
+      shape = PieceShapes.generateProceduralShape(maxSize, this.rng);
     } else {
       // Select from predefined shapes
       shape = this.selectPredefinedShape(gridFullness);
@@ -103,7 +108,7 @@ export class PieceGenerationService {
     // Apply random color
     return {
       ...shape,
-      color: PieceShapes.getRandomColor()
+      color: PieceShapes.getRandomColor(this.rng)
     };
   }
 
@@ -116,11 +121,11 @@ export class PieceGenerationService {
     }
 
     if (gridFullness < 0.3) {
-      // Early game - allow larger pieces
-      return Math.min(this.config.maxRadiusEarlyGame, this.config.maxHexagonCount);
+      // Early game - allow larger pieces (but max 7 for radius 1)
+      return Math.min(7, this.config.maxHexagonCount);
     } else if (gridFullness < this.config.adaptiveThreshold) {
       // Mid game - moderate pieces
-      return Math.min(4, this.config.maxHexagonCount);
+      return Math.min(5, this.config.maxHexagonCount);
     } else {
       // Late game - smaller pieces
       return Math.min(this.config.maxRadiusLateGame, 3);
@@ -147,12 +152,12 @@ export class PieceGenerationService {
       categories = ['single'];
 
       // 30% chance for small piece when critical
-      if (Math.random() < 0.3) {
+      if (this.rng.random() < 0.3) {
         categories.push('small');
       }
     }
 
-    const shape = PieceShapes.getRandomShapeFromCategories(...categories);
+    const shape = PieceShapes.getRandomShapeFromCategories(...categories, this.rng);
     return shape || PieceShapes.SINGLE;
   }
 
@@ -166,9 +171,10 @@ export class PieceGenerationService {
       // Use single cells as fallback
       const shape: PieceShape = {
         ...PieceShapes.SINGLE,
-        color: PieceShapes.getRandomColor()
+        color: PieceShapes.getRandomColor(this.rng)
       };
-      pieces.push(new PieceModel(shape));
+      const colorIndex = Math.floor(this.rng.random() * 8);
+      pieces.push(new PieceModel(shape, colorIndex, () => this.rng.random()));
     }
 
     return pieces;
@@ -188,8 +194,8 @@ export class PieceGenerationService {
 
     return new PieceModel({
       ...shape,
-      color: PieceShapes.getRandomColor()
-    });
+      color: PieceShapes.getRandomColor(this.rng)
+    }, Math.floor(this.rng.random() * 8), () => this.rng.random());
   }
 
   /**
@@ -205,8 +211,8 @@ export class PieceGenerationService {
 
     return shapes.map(shape => new PieceModel({
       ...shape,
-      color: PieceShapes.getRandomColor()
-    }));
+      color: PieceShapes.getRandomColor(this.rng)
+    }, Math.floor(this.rng.random() * 8), () => this.rng.random()));
   }
 
   /**
@@ -226,8 +232,8 @@ export class PieceGenerationService {
     for (const shape of shapes) {
       pieces.push(new PieceModel({
         ...shape,
-        color: PieceShapes.getRandomColor()
-      }));
+        color: PieceShapes.getRandomColor(this.rng)
+      }, Math.floor(this.rng.random() * 8), () => this.rng.random()));
     }
 
     return pieces;

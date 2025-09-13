@@ -2,6 +2,7 @@ import express from 'express';
 import { InitResponse, IncrementResponse, DecrementResponse } from '../shared/types/api';
 import { redis, createServer, context } from '@devvit/web/server';
 import { createPost } from './core/post';
+import { handleColormindRequest } from './api/colormind';
 
 const app = express();
 
@@ -117,6 +118,13 @@ router.post('/internal/menu/post-create', async (_req, res): Promise<void> => {
       message: 'Failed to create post',
     });
   }
+});
+
+// Colormind API proxy endpoint
+router.post('/api/colormind', async (req, res): Promise<void> => {
+  const response = await handleColormindRequest(req as unknown as Request);
+  const data = await response.json();
+  res.json(data);
 });
 
 // Use router middleware
