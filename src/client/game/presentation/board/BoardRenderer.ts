@@ -28,9 +28,9 @@ export class BoardRenderer {
   private cellsContainer: Phaser.GameObjects.Container;
   private effectsContainer: Phaser.GameObjects.Container;
 
-  // Cell visuals
-  private cellGraphics: Map<string, Phaser.GameObjects.Graphics>; // background grid cells
-  private cellPieceGraphics: Map<string, Phaser.GameObjects.Graphics>; // piece overlays
+  // Cell visuals using SVG images for base/fill
+  private cellBaseImages: Map<string, Phaser.GameObjects.Image>;
+  private cellFillImages: Map<string, Phaser.GameObjects.Image>;
   private cellInteractives: Map<string, Phaser.GameObjects.Zone>;
 
   // Board configuration
@@ -54,9 +54,11 @@ export class BoardRenderer {
     this.themeProvider = new NeonThemeProvider();
     this.viewportManager = new ViewportManager(scene);
     this.hexRenderer = new HexagonRenderer(this.themeProvider);
+    // Ensure each grid cell is rotated by 30 degrees for pointy-top look
+    this.hexRenderer.setRotationOffset(Math.PI / 6);
 
-    this.cellGraphics = new Map();
-    this.cellPieceGraphics = new Map();
+    this.cellBaseImages = new Map();
+    this.cellFillImages = new Map();
     this.cellInteractives = new Map();
 
     // Create container hierarchy with proper depth
@@ -117,8 +119,8 @@ export class BoardRenderer {
 
     // Account for margins and piece tray at bottom
     // Leave space for piece tray and margins
-    const availableWidth = viewport.width * 0.8;
-    const availableHeight = viewport.height * 0.38; // Reduced to make room for score above and pieces below
+    const availableWidth = viewport.width * 0.85;  // Reasonable width
+    const availableHeight = viewport.height * 0.48; // Reasonable height for grid
 
     // Calculate hex size based on available space
     // Width: size * sqrt(3) * gridWidth
@@ -127,11 +129,13 @@ export class BoardRenderer {
     const sizeByHeight = availableHeight / (1.5 * gridHeight);
 
     // Use the smaller to ensure it fits
-    this.hexSize = Math.min(sizeByWidth, sizeByHeight, 50); // Cap at 50 for performance
-    this.hexSize = Math.max(this.hexSize, 20); // Min size for visibility
+    this.hexSize = Math.min(sizeByWidth, sizeByHeight, 60); // Adjusted for smaller scale
+    this.hexSize = Math.max(this.hexSize, 30); // Minimum size for visibility
+    // Make grid 5% smaller overall
+    this.hexSize *= 0.95;
 
-    // Adjust spacing proportionally - more spacing for cleaner look
-    this.hexSpacing = this.hexSize * 0.08;
+    // Reduce spacing so cells sit closer together (less gap)
+    this.hexSpacing = this.hexSize * 0.01; // even tighter gaps
   }
 
   /**
@@ -160,9 +164,16 @@ export class BoardRenderer {
     const key = hexToKey(coords);
     const position = this.hexToPixelInternal(coords);
 
-    // Graphics mode only
-    const graphics = this.scene.add.graphics(); // background grid cell
-    const pieceGraphics = this.scene.add.graphics(); // piece overlay
+    // Base and fill images using SVGs (pointy-top already baked in)
+    const radius = this.hexSize - this.hexSpacing / 2;
+    const dim = radius * 2;
+    const base = this.scene.add.image(position.x, position.y, RenderConfig.TEXTURE_KEYS.HEX_BASE_SVG).setOrigin(0.5);
+    base.setDisplaySize(dim, dim);
+    base.setRotation(Math.PI / 6);
+    const fill = this.scene.add.image(position.x, position.y, RenderConfig.TEXTURE_KEYS.HEX_FILL_SVG).setOrigin(0.5);
+    fill.setDisplaySize(dim - 2, dim - 2);
+    fill.setRotation(Math.PI / 6);
+    fill.setVisible(false);
 
     // Create interactive zone
     const zone = this.scene.add.zone(
@@ -182,14 +193,14 @@ export class BoardRenderer {
     zone.setData('coords', coords);
     zone.setData('key', key);
 
-    // Add to containers (background, piece overlay, interaction)
-    this.cellsContainer.add(graphics);
-    this.cellsContainer.add(pieceGraphics);
+    // Add to containers
+    this.cellsContainer.add(base);
+    this.cellsContainer.add(fill);
     this.cellsContainer.add(zone);
 
     // Store references
-    this.cellGraphics.set(key, graphics);
-    this.cellPieceGraphics.set(key, pieceGraphics);
+    this.cellBaseImages.set(key, base);
+    this.cellFillImages.set(key, fill);
     this.cellInteractives.set(key, zone);
 
     // Setup interaction events
@@ -210,10 +221,8 @@ export class BoardRenderer {
    * Handle cell hover
    */
   private handleCellHover(coords: HexCoordinates, isHovering: boolean): void {
-    const key = hexToKey(coords);
-    const graphics = this.cellGraphics.get(key);
-    if (graphics && !this.gridModel.isCellOccupied(coords)) {
-      this.renderCell(coords, graphics, isHovering);
+    if (!this.gridModel.isCellOccupied(coords)) {
+      this.renderCell(coords, isHovering);
     }
   }
 
@@ -229,69 +238,43 @@ export class BoardRenderer {
    * Render all cells
    */
   private render(): void {
-    this.cellGraphics.forEach((graphics, key) => {
+    this.cellBaseImages.forEach((_img, key) => {
       const coords = this.keyToCoords(key);
-      this.renderCell(coords, graphics);
+      this.renderCell(coords, false);
     });
   }
 
   /**
    * Render a single cell
    */
-  private renderCell(
-    coords: HexCoordinates,
-    graphics: Phaser.GameObjects.Graphics,
-    isHovering: boolean = false
-  ): void {
-    // Get piece overlay graphics for this cell
+  private renderCell(coords: HexCoordinates, isHovering: boolean = false): void {
     const key = hexToKey(coords);
-    const pieceGfx = this.cellPieceGraphics.get(key);
+    const base = this.cellBaseImages.get(key);
+    const fill = this.cellFillImages.get(key);
+    if (!base || !fill) return;
 
-    graphics.clear();
-    pieceGfx?.clear();
-
-    const position = this.hexToPixelInternal(coords);
-    const px = position.x;
-    const py = position.y;
     const cell = this.gridModel.getCell(coords);
     const isOccupied = cell?.isOccupied || false;
     const theme = this.themeProvider.getTheme();
 
-    // Background grid cell (always empty look, hover only if not occupied)
+    // Base tint (grid)
     const isAlt = (coords.q + coords.r) % 2 === 0;
-    let bgFill = isAlt ? theme.cellEmpty : theme.cellEmptyAlt;
-    let bgBorder = theme.borderSubtle;
-    let bgBorderAlpha = 0.3;
+    let bgColor = isAlt ? theme.cellEmpty : theme.cellEmptyAlt;
     if (isHovering && !isOccupied) {
-      bgFill = theme.cellHover;
-      bgBorder = theme.borderHighlight;
-      bgBorderAlpha = 0.5;
+      bgColor = theme.cellHover;
     }
-    this.hexRenderer.drawHexagon(
-      graphics,
-      px,
-      py,
-      this.hexSize - this.hexSpacing / 2,
-      bgFill,
-      bgBorder,
-      bgBorderAlpha
-    );
+    base.setTint(bgColor);
+    base.setAlpha(0.3);
 
-    // Piece overlay if occupied
-    if (isOccupied && pieceGfx) {
+    if (isOccupied) {
       const fillColor = cell?.pieceColorIndex !== undefined
         ? this.themeProvider.getPieceColorByIndex(cell.pieceColorIndex)
         : this.themeProvider.getPieceColor(cell?.pieceId || '');
-      const borderColor = theme.borderDefault;
-      this.hexRenderer.drawHexagon(
-        pieceGfx,
-        px,
-        py,
-        this.hexSize - this.hexSpacing / 2 - 1,
-        fillColor,
-        borderColor,
-        0.35
-      );
+      fill.setTint(fillColor);
+      fill.setVisible(true);
+      fill.setAlpha(1);
+    } else {
+      fill.setVisible(false);
     }
   }
 
@@ -367,8 +350,8 @@ export class BoardRenderer {
    */
   private centerBoard(): void {
     const viewport = this.viewportManager.getViewport();
-    // Position board lower on screen, below the score
-    const boardY = viewport.height * 0.42; // Position at 42% from top
+    // Position board much lower on screen, very close to pieces
+    const boardY = viewport.height * 0.55; // Position at 55% from top (much closer to pieces)
     // Allow subpixel positioning for smoother anti-aliased edges
     this.boardContainer.setPosition(viewport.centerX, boardY);
   }
@@ -457,12 +440,18 @@ export class BoardRenderer {
    * Clear the board
    */
   private clearBoard(): void {
-    this.cellGraphics.forEach(graphics => graphics.destroy());
-    this.cellPieceGraphics.forEach(graphics => graphics.destroy());
-    this.cellInteractives.forEach(zone => zone.destroy());
-    this.cellGraphics.clear();
-    this.cellPieceGraphics.clear();
-    this.cellInteractives.clear();
+    if (this.cellBaseImages) {
+      this.cellBaseImages.forEach(image => image.destroy());
+      this.cellBaseImages.clear();
+    }
+    if (this.cellFillImages) {
+      this.cellFillImages.forEach(image => image.destroy());
+      this.cellFillImages.clear();
+    }
+    if (this.cellInteractives) {
+      this.cellInteractives.forEach(zone => zone.destroy());
+      this.cellInteractives.clear();
+    }
   }
 
   /**
@@ -621,145 +610,88 @@ export class BoardRenderer {
   }
 
   /**
-   * Animate line clearing with a directional wave per line.
-   * Randomly picks a start side for each line and clears cells one-by-one with ~50ms spacing.
+   * Animate line clearing: each hex bumps, then scales to 0 and fades,
+   * one-by-one with a 0.05s delay between cells.
    */
-  animateLineClear(lines: any[]): Promise<void> {
+  animateLineClear(lines: { cells: HexCoordinates[] }[]): Promise<void> {
     return new Promise(resolve => {
       if (!lines || lines.length === 0) {
         resolve();
         return;
       }
-      // Helper: per-line sorting based on direction, with random starting side
-      const sortLine = (cells: HexCoordinates[], direction: string): HexCoordinates[] => {
-        const sorted = [...cells];
-        switch (direction) {
-          case 'horizontal':
-            sorted.sort((a, b) => a.q - b.q); // left -> right
-            break;
-          case 'diagonalNESW':
-            sorted.sort((a, b) => a.r - b.r); // top-right (lower r) -> bottom-left
-            break;
-          case 'diagonalNWSE':
-            sorted.sort((a, b) => a.q - b.q); // north-west -> south-east
-            break;
-          default:
-            sorted.sort((a, b) => a.q - b.q);
-        }
-        if (Math.random() < 0.5) sorted.reverse(); // random start side
-        return sorted;
-      };
 
-      // Flatten total and prepare batches
-      const batches = lines.map((line: any) => sortLine(line.cells, line.direction));
-      const total = batches.reduce((s: number, arr: HexCoordinates[]) => s + arr.length, 0);
-      if (total === 0) {
-        resolve();
-        return;
+      // Collect unique cells to clear
+      const order: HexCoordinates[] = [];
+      const seen = new Set<string>();
+      for (const line of lines) {
+        line.cells.forEach(c => {
+          const k = hexToKey(c);
+          if (!seen.has(k)) {
+            seen.add(k);
+            order.push(c);
+          }
+        });
       }
 
-      let done = 0;
-      const perCellDelay = 50; // ms (0.05s)
+      const total = order.length;
+      if (total === 0) { resolve(); return; }
 
-      batches.forEach((cells) => {
-        cells.forEach((coord, idx) => {
-          const position = this.hexToPixelInternal(coord);
-          const px = position.x;
-          const py = position.y;
-          const cell = this.gridModel.getCell(coord);
-          const cellColor = cell?.pieceColorIndex !== undefined
-            ? this.themeProvider.getPieceColorByIndex(cell.pieceColorIndex)
-            : this.themeProvider.getTheme().glowSuccess;
+      let finished = 0;
+      const perCellDelay = 50; // 0.05s
 
-          // Overlay container for animation (does not mutate board graphics directly)
-          const container = this.scene.add.container(px, py);
-          container.setDepth(95);
-          this.boardContainer.add(container);
+      order.forEach((coord, idx) => {
+        const key = hexToKey(coord);
+        const fill = this.cellFillImages.get(key);
+        // If no fill image, skip
+        if (!fill) {
+          finished++;
+          if (finished === total) finalize();
+          return;
+        }
 
-          const hexGraphics = this.scene.add.graphics();
-          this.hexRenderer.drawHexagon(
-            hexGraphics,
-            0,
-            0,
-            this.hexSize - this.hexSpacing / 2,
-            cellColor,
-            cellColor,
-            0.25,
-            1
-          );
-          container.add(hexGraphics);
-
-          const glow = this.scene.add.graphics();
-          glow.setAlpha(0);
-          glow.lineStyle(2.5, cellColor, 0.8);
-          this.hexRenderer.drawHexagonOutline(glow, 0, 0, this.hexSize - this.hexSpacing / 2 + 2);
-          container.add(glow);
-
-          const jitter = Math.random() * 20;
-          const delay = idx * perCellDelay + jitter;
-
-          // Quick glow pulse
-          this.scene.tweens.add({
-            targets: glow,
-            alpha: 1,
-            scaleX: 1.15,
-            scaleY: 1.15,
-            duration: 160,
-            delay,
-            ease: 'Sine.easeOut',
-          });
-
-          // Also animate the piece overlay so the actual filled cell vanishes progressively (grid stays)
-          const baseKey = hexToKey(coord);
-          const baseGraphics = this.cellPieceGraphics.get(baseKey);
-          if (baseGraphics) {
-            // Fade only (avoid scaling vector graphics which can look blurry)
-            this.scene.tweens.add({
-              targets: baseGraphics,
+        const timeline = this.scene.tweens.timeline({
+          delay: idx * perCellDelay,
+          tweens: [
+            {
+              targets: fill,
+              scaleX: 1.15,
+              scaleY: 1.15,
+              duration: 90,
+              ease: 'Sine.easeOut',
+            },
+            {
+              targets: fill,
+              scaleX: 0,
+              scaleY: 0,
               alpha: 0,
-              duration: 260,
-              delay: delay + 40,
-              ease: 'Power2',
+              duration: 220,
+              ease: 'Back.easeIn',
               onComplete: () => {
-                baseGraphics.setVisible(false);
-              }
-            });
-          }
-
-          // Shrink + fade overlay container
-          this.scene.tweens.add({
-            targets: container,
-            alpha: 0,
-            scaleX: 0.6,
-            scaleY: 0.6,
-            rotation: Math.PI / 12,
-            duration: 220,
-            delay: delay + 60,
-            ease: 'Power2',
-            onComplete: () => {
-              container.destroy();
-              done++;
-              if (done === total) {
-                // Clear all cells in all lines
-                const all = batches.flat();
-                all.forEach(c => this.gridModel.setCellOccupied(c, false));
-                // Reset piece overlay graphics for next renders
-                all.forEach(c => {
-                  const g = this.cellPieceGraphics.get(hexToKey(c));
-                  if (g) {
-                    g.setScale(1, 1);
-                    g.setAlpha(1);
-                    g.setVisible(true);
-                    g.clear();
-                  }
-                });
-                this.updateBoard();
-                resolve();
-              }
-            }
-          });
+                finished++;
+                if (finished === total) finalize();
+              },
+            },
+          ],
         });
+        timeline.play();
       });
+
+      const finalize = () => {
+        // Clear cells in the model
+        order.forEach(c => this.gridModel.setCellOccupied(c, false));
+        // Reset fill images
+        order.forEach(c => {
+          const img = this.cellFillImages.get(hexToKey(c));
+          if (img) {
+            img.setScale(1);
+            img.setAlpha(1);
+            img.setVisible(false);
+          }
+        });
+        // Re-render grid
+        this.updateBoard();
+        resolve();
+      };
     });
   }
 

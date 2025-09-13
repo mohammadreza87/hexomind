@@ -9,8 +9,8 @@ const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   parent: 'game-container',
   backgroundColor: '#1a1a1b', // Reddit dark mode default
-  // Render at device pixel ratio for crisp HiDPI without nearest-neighbor artifacts
-  resolution: Math.min(2, (window.devicePixelRatio || 1)),
+  // Use full device pixel ratio for maximum crispness
+  resolution: window.devicePixelRatio || 1,
   scale: {
     mode: Phaser.Scale.RESIZE,
     autoCenter: Phaser.Scale.CENTER_BOTH,
@@ -26,11 +26,18 @@ const config: Phaser.Types.Core.GameConfig = {
     }
   },
   render: {
-    // Smooth vector rendering (Graphics) looks best with AA on and pixelArt off
+    // Enable high quality rendering
     antialias: true,
     pixelArt: false,
     roundPixels: false,
-    powerPreference: 'high-performance'
+    transparent: false,
+    clearBeforeRender: true,
+    preserveDrawingBuffer: false,
+    premultipliedAlpha: true,
+    powerPreference: 'high-performance',
+    batchSize: 4096,
+    maxTextures: -1,
+    maxLights: 10
   }
 };
 

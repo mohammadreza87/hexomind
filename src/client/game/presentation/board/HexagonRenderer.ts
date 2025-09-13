@@ -12,6 +12,8 @@ export class HexagonRenderer {
 
   // Cached calculations
   private cachedPoints: Map<number, Phaser.Math.Vector2[]> = new Map();
+  private orientation: 'pointy' | 'flat' = 'pointy';
+  private rotationOffset: number = 0; // additional rotation in radians
 
   constructor(themeProvider: NeonThemeProvider) {
     this.themeProvider = themeProvider;
@@ -28,8 +30,9 @@ export class HexagonRenderer {
 
     const points: Phaser.Math.Vector2[] = [];
 
+    const base = (this.orientation === 'pointy' ? 0 : -Math.PI / 6) + this.rotationOffset;
     for (let i = 0; i < 6; i++) {
-      const angle = (Math.PI / 3) * i - Math.PI / 6; // Start from flat top
+      const angle = (Math.PI / 3) * i + base; // pointy: start at 0, flat: -30deg
       const x = size * Math.cos(angle);
       const y = size * Math.sin(angle);
       points.push(new Phaser.Math.Vector2(x, y));
@@ -433,5 +436,14 @@ export class HexagonRenderer {
    */
   clearCache(): void {
     this.cachedPoints.clear();
+  }
+
+  /**
+   * Set an extra rotation for all hex computations (in radians).
+   * Call when switching visual orientation (e.g., +PI/6 for 30 degrees).
+   */
+  setRotationOffset(radians: number): void {
+    this.rotationOffset = radians;
+    this.clearCache();
   }
 }

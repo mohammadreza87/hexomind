@@ -14,7 +14,7 @@ export class PieceRenderer {
   private themeProvider: NeonThemeProvider;
   private container: Phaser.GameObjects.Container;
 
-  private hexagons: Phaser.GameObjects.Graphics[] = [];
+  private hexagons: Phaser.GameObjects.Image[] = [];
   private shadow: Phaser.GameObjects.Graphics;
   private glow: Phaser.GameObjects.Graphics;
 
@@ -101,35 +101,19 @@ export class PieceRenderer {
     const centerX = (bounds.minX + bounds.maxX) / 2;
     const centerY = (bounds.minY + bounds.maxY) / 2;
 
-    // Graphics mode only
-    shape.cells.forEach((coord, index) => {
-      const hex = this.scene.add.graphics();
+    // Image mode: draw with rotated SVG fill texture for crisp edges
+    shape.cells.forEach((coord) => {
       const pos = this.hexToPixel(coord);
       const relX = pos.x - centerX;
       const relY = pos.y - centerY;
-
-      // Draw filled hexagon with correct rotation (flat top)
-      hex.fillStyle(pieceColor, 1);
-      hex.beginPath();
-      for (let i = 0; i < 6; i++) {
-        const angle = (Math.PI / 3) * i - Math.PI / 6; // Flat top orientation
-        const px = relX + this.hexSize * Math.cos(angle);
-        const py = relY + this.hexSize * Math.sin(angle);
-        if (i === 0) {
-          hex.moveTo(px, py);
-        } else {
-          hex.lineTo(px, py);
-        }
-      }
-      hex.closePath();
-      hex.fillPath();
-
-      // Add border
-      hex.lineStyle(1, 0x000000, 0.5);
-      hex.strokePath();
-
-      this.hexagons.push(hex);
-      this.container.add(hex);
+      const dim = this.hexSize * 2;
+      const img = this.scene.add.image(relX, relY, RenderConfig.TEXTURE_KEYS.HEX_FILL_SVG).setOrigin(0.5);
+      img.setDisplaySize(dim, dim);
+      // Ensure 30° rotation at runtime as well
+      img.setRotation(Math.PI / 6);
+      img.setTint(pieceColor);
+      this.container.add(img);
+      this.hexagons.push(img);
     });
   }
 

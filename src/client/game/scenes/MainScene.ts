@@ -7,6 +7,8 @@ import { HexCoordinates } from '../../../shared/types/hex';
 import { PieceTray } from '../presentation/pieces/PieceTray';
 import { PlacementValidator } from '../core/services/PlacementValidator';
 import { RenderConfig } from '../config/RenderConfig';
+// Asset URLs (bundled by Vite) - commented out for now since SVG not available
+// import hexSvgUrl from '../../assets/images/hex.svg';
 
 /**
  * MainScene - The main and only game scene for Hexomind
@@ -35,11 +37,14 @@ export class MainScene extends Phaser.Scene {
   }
 
   preload(): void {
-    // Load hexagon PNG images if enabled
+    // Load hexagon assets
     if (RenderConfig.USE_PNG_HEXAGONS) {
       this.load.image(RenderConfig.TEXTURE_KEYS.HEX_EMPTY, RenderConfig.ASSETS.HEX_EMPTY);
       this.load.image(RenderConfig.TEXTURE_KEYS.HEX_FILLED, RenderConfig.ASSETS.HEX_FILLED);
       this.load.image(RenderConfig.TEXTURE_KEYS.HEX_PIECE, RenderConfig.ASSETS.HEX_PIECE);
+      // Load SVGs for base (grid) and fill (pieces)
+      this.load.svg(RenderConfig.TEXTURE_KEYS.HEX_BASE_SVG, 'assets/hex-base.svg', { width: 256, height: 256 });
+      this.load.svg(RenderConfig.TEXTURE_KEYS.HEX_FILL_SVG, 'assets/hex-fill.svg', { width: 256, height: 256 });
 
       // Show loading progress
       this.load.on('progress', (value: number) => {
@@ -48,6 +53,17 @@ export class MainScene extends Phaser.Scene {
 
       this.load.on('complete', () => {
         console.log('Assets loaded successfully');
+      });
+    } else if (RenderConfig.USE_SVG_HEXAGONS) {
+      // Load SVG assets with high resolution for crisp rendering
+      this.load.svg(RenderConfig.TEXTURE_KEYS.HEX_BASE, 'assets/hex-base.svg', { width: 512, height: 512 });
+      this.load.svg(RenderConfig.TEXTURE_KEYS.HEX_FILL, 'assets/hex-fill.svg', { width: 512, height: 512 });
+
+      this.load.on('progress', (value: number) => {
+        console.log('Loading SVG:', Math.round(value * 100) + '%');
+      });
+      this.load.on('complete', () => {
+        console.log('SVG assets loaded');
       });
     } else {
       // Using programmatic graphics
