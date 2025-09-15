@@ -610,88 +610,83 @@ export class BoardRenderer {
   }
 
   /**
-   * Animate line clearing: each hex bumps, then scales to 0 and fades,
-   * one-by-one with a 0.05s delay between cells.
+   * Animate line clearing with a clean wave per line.
+   * - Computes a per-target delay so cells in each line vanish in order.
+   * - Deduplicates overlap cells (at line intersections) using the minimum delay.
+   * - Smooth fade+shrink, no pre-bump.
    */
   animateLineClear(lines: { cells: HexCoordinates[] }[]): Promise<void> {
     return new Promise(resolve => {
-      if (!lines || lines.length === 0) {
-        resolve();
-        return;
-      }
+      if (!lines || lines.length === 0) { resolve(); return; }
 
-      // Collect unique cells to clear
-      const order: HexCoordinates[] = [];
-      const seen = new Set<string>();
-      for (const line of lines) {
-        line.cells.forEach(c => {
-          const k = hexToKey(c);
-          if (!seen.has(k)) {
-            seen.add(k);
-            order.push(c);
+      // Build a delay map per unique cell so overlapping cells only animate once
+      const perCellDelay = 60;    // ms between cells in a line
+      const perLineDelay = 120;   // ms between separate lines starting
+
+      const delayByKey = new Map<string, number>();
+      const uniqueCells: HexCoordinates[] = [];
+
+      lines.forEach((line, lineIndex) => {
+        line.cells.forEach((c, idxInLine) => {
+          const key = hexToKey(c);
+          const candidate = lineIndex * perLineDelay + idxInLine * perCellDelay;
+          if (!delayByKey.has(key)) {
+            delayByKey.set(key, candidate);
+            uniqueCells.push(c);
+          } else {
+            // Use the earliest delay if a cell appears in multiple lines
+            const prev = delayByKey.get(key)!;
+            if (candidate < prev) delayByKey.set(key, candidate);
           }
         });
-      }
-
-      const total = order.length;
-      if (total === 0) { resolve(); return; }
-
-      let finished = 0;
-      const perCellDelay = 50; // 0.05s
-
-      order.forEach((coord, idx) => {
-        const key = hexToKey(coord);
-        const fill = this.cellFillImages.get(key);
-        // If no fill image, skip
-        if (!fill) {
-          finished++;
-          if (finished === total) finalize();
-          return;
-        }
-
-        const timeline = this.scene.tweens.timeline({
-          delay: idx * perCellDelay,
-          tweens: [
-            {
-              targets: fill,
-              scaleX: 1.15,
-              scaleY: 1.15,
-              duration: 90,
-              ease: 'Sine.easeOut',
-            },
-            {
-              targets: fill,
-              scaleX: 0,
-              scaleY: 0,
-              alpha: 0,
-              duration: 220,
-              ease: 'Back.easeIn',
-              onComplete: () => {
-                finished++;
-                if (finished === total) finalize();
-              },
-            },
-          ],
-        });
-        timeline.play();
       });
 
-      const finalize = () => {
-        // Clear cells in the model
-        order.forEach(c => this.gridModel.setCellOccupied(c, false));
-        // Reset fill images
-        order.forEach(c => {
-          const img = this.cellFillImages.get(hexToKey(c));
-          if (img) {
-            img.setScale(1);
-            img.setAlpha(1);
-            img.setVisible(false);
-          }
-        });
-        // Re-render grid
-        this.updateBoard();
-        resolve();
-      };
+      if (uniqueCells.length === 0) { resolve(); return; }
+
+      // Collect targets and assign their per-target delay via data
+      const targets: Phaser.GameObjects.Image[] = [];
+      uniqueCells.forEach(c => {
+        const img = this.cellFillImages.get(hexToKey(c));
+        if (img) {
+          // Kill any existing tweens affecting this image before starting
+          this.scene.tweens.killTweensOf(img);
+          img.setData('clearDelay', delayByKey.get(hexToKey(c)) || 0);
+          targets.push(img);
+        }
+      });
+
+      if (targets.length === 0) { resolve(); return; }
+
+      // Drive the wave: shrink + fade with individual delays
+      this.scene.tweens.add({
+        targets,
+        scaleX: 0,
+        scaleY: 0,
+        alpha: 0,
+        duration: 220,
+        ease: 'Cubic.easeInOut',
+        delay: (target: any) => (target.getData && target.getData('clearDelay')) || 0,
+        onComplete: () => {
+          // Update model state
+          uniqueCells.forEach(c => this.gridModel.setCellOccupied(c, false));
+
+          // Reset visuals for reuse
+          const radius = this.hexSize - this.hexSpacing / 2;
+          const dim = radius * 2;
+          uniqueCells.forEach(c => {
+            const img = this.cellFillImages.get(hexToKey(c));
+            if (img) {
+              img.setDisplaySize(dim - 2, dim - 2);
+              img.setAlpha(1);
+              img.setVisible(false);
+              img.removeData('clearDelay');
+            }
+          });
+
+          this.updateBoard();
+          resolve();
+        }
+      });
     });
   }
 
