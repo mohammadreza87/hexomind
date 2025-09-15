@@ -71,12 +71,12 @@ export class BoardRenderer {
 
     // Create preview graphics
     this.previewGraphics = scene.add.graphics();
-    this.previewGraphics.setDepth(75);
+    this.previewGraphics.setDepth(70);
     this.boardContainer.add(this.previewGraphics);
 
-    // Create line preview container and graphics array
+    // Create line preview container and graphics array (higher depth for filled hexagons)
     this.linePreviewContainer = scene.add.container(0, 0);
-    this.linePreviewContainer.setDepth(70);
+    this.linePreviewContainer.setDepth(75);
     this.boardContainer.add(this.linePreviewContainer);
     this.linePreviewGraphics = [];
 
@@ -134,8 +134,8 @@ export class BoardRenderer {
     // Make grid 5% smaller overall
     this.hexSize *= 0.95;
 
-    // Reduce spacing so cells sit closer together (less gap)
-    this.hexSpacing = this.hexSize * 0.01; // even tighter gaps
+    // Add spacing between cells for better visual clarity
+    this.hexSpacing = this.hexSize * 0.08; // 8% spacing for clear separation
   }
 
   /**
@@ -164,8 +164,9 @@ export class BoardRenderer {
     const key = hexToKey(coords);
     const position = this.hexToPixelInternal(coords);
 
-    // Base and fill images using SVGs (pointy-top already baked in)
-    const radius = this.hexSize - this.hexSpacing / 2;
+    // Base and fill images with spacing applied
+    // Reduce the visual size to create gaps between hexagons
+    const radius = this.hexSize - this.hexSpacing;
     const dim = radius * 2;
     const base = this.scene.add.image(position.x, position.y, RenderConfig.TEXTURE_KEYS.HEX_BASE_SVG).setOrigin(0.5);
     base.setDisplaySize(dim, dim);
@@ -183,11 +184,18 @@ export class BoardRenderer {
       this.hexSize * 2
     );
 
-    zone.setInteractive({
-      hitArea: new Phaser.Geom.Polygon(this.hexRenderer.getHexPoints(this.hexSize)),
-      hitAreaCallback: Phaser.Geom.Polygon.Contains,
-      useHandCursor: true
-    });
+    // Build a polygon hit area in the Zone's local space (top-left origin)
+    // Phaser Zones use local coordinates with (0,0) at the top-left of the zone,
+    // so shift the center-based hex points by +size in both axes.
+    const hitSize = this.hexSize - this.hexSpacing / 2;
+    const rawPoints = this.hexRenderer.getHexPoints(hitSize);
+    const shiftedPoints = rawPoints.map(p => new Phaser.Geom.Point(p.x + this.hexSize, p.y + this.hexSize));
+
+    zone.setInteractive(new Phaser.Geom.Polygon(shiftedPoints), Phaser.Geom.Polygon.Contains);
+    // Cursor feedback
+    if (zone.input) {
+      zone.input.cursor = 'pointer';
+    }
 
     // Store data
     zone.setData('coords', coords);
@@ -483,8 +491,18 @@ export class BoardRenderer {
     this.clearLinePreview();
 
     const theme = this.themeProvider.getTheme();
-    const color = isValid ? theme.cellValid : theme.cellInvalid;
-    const alpha = 0.5;
+
+    // Use piece color for preview if provided, otherwise fallback to valid/invalid colors
+    let previewColor: number;
+    if (colorIndex !== undefined && isValid) {
+      // Get the actual piece color from theme provider
+      previewColor = this.themeProvider.getPieceColorByIndex(colorIndex);
+    } else {
+      // Fallback to valid/invalid colors
+      previewColor = isValid ? theme.cellValid : theme.cellInvalid;
+    }
+
+    const alpha = isValid ? 0.4 : 0.3; // Slightly transparent to show it's a preview
 
     // Draw piece preview
     cells.forEach(coord => {
@@ -495,25 +513,35 @@ export class BoardRenderer {
     const px = position.x;
     const py = position.y;
 
-      // Draw preview hexagon with proper spacing
+      // Draw preview hexagon with proper spacing and piece color
       this.hexRenderer.drawHexagon(
         this.previewGraphics,
         px,
         py,
-        this.hexSize - this.hexSpacing / 2 - 2,
-        color,
-        color,
+        this.hexSize - this.hexSpacing,
+        previewColor,
+        previewColor,
         alpha
       );
 
-      // Add pulse effect
+      // Add outline effect matching piece color
       if (isValid) {
-        this.previewGraphics.lineStyle(2, theme.glowPrimary, 0.3);
+        // Use piece color for the outline glow
+        this.previewGraphics.lineStyle(3, previewColor, 0.6);
         this.hexRenderer.drawHexagonOutline(
           this.previewGraphics,
           position.x,
           position.y,
-          this.hexSize
+          this.hexSize - this.hexSpacing
+        );
+      } else {
+        // Red outline for invalid placement
+        this.previewGraphics.lineStyle(2, theme.cellInvalid, 0.4);
+        this.hexRenderer.drawHexagonOutline(
+          this.previewGraphics,
+          position.x,
+          position.y,
+          this.hexSize - this.hexSpacing
         );
       }
     });
@@ -529,20 +557,21 @@ export class BoardRenderer {
           ? this.themeProvider.getPieceColorByIndex(colorIndex)
           : this.themeProvider.getTheme().glowSuccess;
 
-        // Create outline graphics for each cell
+        // Highlight complete line cells with piece color
         potentialLines.forEach(line => {
           line.cells.forEach(coord => {
             const position = this.hexToPixelInternal(coord);
             const px = position.x;
             const py = position.y;
 
-            // Create a separate graphics object for each hexagon outline
+            // Create a separate graphics object for each hexagon
             const hexGraphics = this.scene.add.graphics();
 
-            // Draw thin outline with the piece color
-            hexGraphics.lineStyle(1.5, linePreviewColor, 1);
+            // Fill the hexagon with the piece color (semi-transparent)
+            hexGraphics.fillStyle(linePreviewColor, 0.6);
+            hexGraphics.lineStyle(2, linePreviewColor, 0.8);
 
-            const points = this.hexRenderer.getHexPoints(this.hexSize - this.hexSpacing / 2 + 2);
+            const points = this.hexRenderer.getHexPoints(this.hexSize - this.hexSpacing);
 
             hexGraphics.beginPath();
             hexGraphics.moveTo(px + points[0].x, py + points[0].y);
@@ -552,7 +581,8 @@ export class BoardRenderer {
             }
 
             hexGraphics.closePath();
-            hexGraphics.strokePath(); // Only stroke, no fill
+            hexGraphics.fillPath(); // Fill with piece color
+            hexGraphics.strokePath(); // Add outline for definition
 
             // Add to container and array
             this.linePreviewContainer.add(hexGraphics);
@@ -560,11 +590,11 @@ export class BoardRenderer {
           });
         });
 
-        // Add animated pulse effect to the container
+        // Add subtle animated pulse effect to the container
         this.scene.tweens.add({
           targets: this.linePreviewContainer,
-          alpha: { from: 1, to: 0.5 },
-          duration: 600,
+          alpha: { from: 1, to: 0.7 },
+          duration: 800,
           yoyo: true,
           repeat: -1,
           ease: 'Sine.easeInOut'
@@ -610,82 +640,117 @@ export class BoardRenderer {
   }
 
   /**
-   * Animate line clearing with a clean wave per line.
-   * - Computes a per-target delay so cells in each line vanish in order.
-   * - Deduplicates overlap cells (at line intersections) using the minimum delay.
-   * - Smooth fade+shrink, no pre-bump.
+   * Animate line clearing with synchronized steps across all lines.
+   * Step 0 cells from all lines clear together, then step 1 together, etc.
    */
   animateLineClear(lines: { cells: HexCoordinates[] }[]): Promise<void> {
     return new Promise(resolve => {
       if (!lines || lines.length === 0) { resolve(); return; }
 
-      // Build a delay map per unique cell so overlapping cells only animate once
-      const perCellDelay = 60;    // ms between cells in a line
-      const perLineDelay = 120;   // ms between separate lines starting
+      // Map each unique cell to the minimum index it appears at across lines
+      const indexByKey = new Map<string, number>();
+      const cellByKey = new Map<string, HexCoordinates>();
+      let maxIndex = 0;
 
-      const delayByKey = new Map<string, number>();
-      const uniqueCells: HexCoordinates[] = [];
-
-      lines.forEach((line, lineIndex) => {
-        line.cells.forEach((c, idxInLine) => {
+      lines.forEach(line => {
+        line.cells.forEach((c, idx) => {
           const key = hexToKey(c);
-          const candidate = lineIndex * perLineDelay + idxInLine * perCellDelay;
-          if (!delayByKey.has(key)) {
-            delayByKey.set(key, candidate);
-            uniqueCells.push(c);
-          } else {
-            // Use the earliest delay if a cell appears in multiple lines
-            const prev = delayByKey.get(key)!;
-            if (candidate < prev) delayByKey.set(key, candidate);
+          const prev = indexByKey.get(key);
+          if (prev === undefined || idx < prev) {
+            indexByKey.set(key, idx);
+            cellByKey.set(key, c);
           }
+          if (idx > maxIndex) maxIndex = idx;
         });
       });
 
-      if (uniqueCells.length === 0) { resolve(); return; }
+      if (indexByKey.size === 0) { resolve(); return; }
 
-      // Collect targets and assign their per-target delay via data
-      const targets: Phaser.GameObjects.Image[] = [];
-      uniqueCells.forEach(c => {
-        const img = this.cellFillImages.get(hexToKey(c));
+      // Build layers: each step index -> list of image targets
+      const layers: Phaser.GameObjects.Image[][] = [];
+      for (let i = 0; i <= maxIndex; i++) layers[i] = [];
+
+      indexByKey.forEach((idx, key) => {
+        const img = this.cellFillImages.get(key);
         if (img) {
-          // Kill any existing tweens affecting this image before starting
           this.scene.tweens.killTweensOf(img);
-          img.setData('clearDelay', delayByKey.get(hexToKey(c)) || 0);
-          targets.push(img);
+          layers[idx].push(img);
         }
       });
 
-      if (targets.length === 0) { resolve(); return; }
+      // Remove empty tail layers
+      while (layers.length > 0 && layers[layers.length - 1].length === 0) {
+        layers.pop();
+      }
 
-      // Drive the wave: shrink + fade with individual delays
-      this.scene.tweens.add({
-        targets,
-        scaleX: 0,
-        scaleY: 0,
-        alpha: 0,
-        duration: 220,
-        ease: 'Cubic.easeInOut',
-        delay: (target: any) => (target.getData && target.getData('clearDelay')) || 0,
-        onComplete: () => {
-          // Update model state
-          uniqueCells.forEach(c => this.gridModel.setCellOccupied(c, false));
+      if (layers.length === 0) { resolve(); return; }
 
-          // Reset visuals for reuse
-          const radius = this.hexSize - this.hexSpacing / 2;
-          const dim = radius * 2;
-          uniqueCells.forEach(c => {
-            const img = this.cellFillImages.get(hexToKey(c));
-            if (img) {
-              img.setDisplaySize(dim - 2, dim - 2);
-              img.setAlpha(1);
-              img.setVisible(false);
-              img.removeData('clearDelay');
-            }
-          });
+      // Wave effect - each cell disappears one by one
+      const perCellDelay = 30; // 0.03 second delay between each cell (faster wave)
+      const animDuration = 100; // Faster shrink for each cell
 
-          this.updateBoard();
-          resolve();
+      let completed = 0;
+      const total = indexByKey.size;
+
+      if (total === 0) {
+        resolve();
+        return;
+      }
+
+      const finalize = () => {
+        // Update model for all affected cells
+        cellByKey.forEach(c => this.gridModel.setCellOccupied(c, false));
+
+        // Reset visuals for reuse with consistent spacing
+        const radius = this.hexSize - this.hexSpacing;
+        const dim = radius * 2;
+        cellByKey.forEach((c, key) => {
+          const img = this.cellFillImages.get(key);
+          if (img) {
+            img.setDisplaySize(dim - 2, dim - 2);
+            img.setAlpha(1);
+            img.setVisible(false);
+          }
+        });
+
+        this.updateBoard();
+        resolve();
+      };
+
+      // Create ordered array of cells to animate sequentially
+      const cellsToAnimate: { img: Phaser.GameObjects.Image, key: string }[] = [];
+      indexByKey.forEach((cellIndex, key) => {
+        const img = this.cellFillImages.get(key);
+        if (img) {
+          this.scene.tweens.killTweensOf(img);
+          cellsToAnimate.push({ img, key });
         }
+      });
+
+      // Sort by their index to ensure proper wave order
+      cellsToAnimate.sort((a, b) => {
+        const indexA = indexByKey.get(a.key) || 0;
+        const indexB = indexByKey.get(b.key) || 0;
+        return indexA - indexB;
+      });
+
+      // Animate each cell with sequential delay
+      cellsToAnimate.forEach((cell, index) => {
+        this.scene.tweens.add({
+          targets: cell.img,
+          scaleX: 0,
+          scaleY: 0,
+          alpha: 0,
+          duration: animDuration,
+          delay: index * perCellDelay, // Sequential delay for each cell
+          ease: 'Power2.easeIn',
+          onComplete: () => {
+            completed++;
+            if (completed === total) {
+              finalize();
+            }
+          }
+        });
       });
     });
   }

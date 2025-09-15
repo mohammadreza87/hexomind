@@ -1,0 +1,56 @@
+/* High-DPI Display Optimization for Reddit Devvit */
+
+/* Container setup */
+#game-container {
+  /* Ensure proper sizing */
+  width: 100%;
+  height: 100%;
+  position: relative;
+
+  /* Prevent text selection */
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+/* Canvas specific optimizations for high-DPI */
+#game-container canvas {
+  /* Let Phaser handle sizing */
+  display: block;
+  margin: 0 auto;
+
+  /* Critical for sharp rendering on retina displays */
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+
+  /* Prevent blurry scaling */
+  -ms-interpolation-mode: nearest-neighbor;
+
+  /* Font rendering */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-smooth: always;
+
+  /* Force GPU acceleration */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  will-change: transform;
+}
+
+/* Disable browser interpolation on scaled images */
+#game-container img {
+  image-rendering: -moz-crisp-edges;
+  image-rendering: -webkit-crisp-edges;
+  image-rendering: pixelated;
+}
+
+/* For WebGL contexts */
+#game-container canvas[data-engine="phaser"] {
+  /* Force GPU acceleration */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}

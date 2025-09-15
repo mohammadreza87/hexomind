@@ -20,10 +20,10 @@ export class RenderConfig {
     HEX_PIECE: 'hex_piece',
   } as const;
 
-  // Legacy PNG asset paths (kept for compatibility)
+  // PNG asset paths
   static readonly ASSETS = {
-    HEX_EMPTY: '/assets/images/hex-empty.png',
-    HEX_FILLED: '/assets/images/hex-filled.png',
-    HEX_PIECE: '/assets/images/hex-piece.png',
+    HEX_EMPTY: '/assets/hex-base.png',
+    HEX_FILLED: '/assets/hex-fill.png',
+    HEX_PIECE: '/assets/hex-fill.png',
   } as const;
 }

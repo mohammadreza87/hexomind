@@ -62,44 +62,13 @@ export class PlacementValidator {
    * Get the reference point for a piece (center or first cell)
    */
   private getPieceReferencePoint(piece: PieceModel): HexCoordinates {
-    // For better UX, use the visual center of the piece
-    // Calculate the centroid of all cells
+    // Anchor by a stable reference: prefer explicit origin (0,0) if present,
+    // otherwise use the first cell. This matches Block Blast behavior and
+    // avoids centroid rounding/mismatch between detection and placement.
     const shape = piece.getShape();
-
-    if (shape.cells.length === 0) {
-      return { q: 0, r: 0 };
-    }
-
-    if (shape.cells.length === 1) {
-      return shape.cells[0];
-    }
-
-    // Calculate average position (centroid)
-    let sumQ = 0;
-    let sumR = 0;
-
-    shape.cells.forEach(cell => {
-      sumQ += cell.q;
-      sumR += cell.r;
-    });
-
-    // For hex grids, we need to round to nearest hex
-    const avgQ = sumQ / shape.cells.length;
-    const avgR = sumR / shape.cells.length;
-
-    // Find the piece cell closest to the centroid
-    let closestCell = shape.cells[0];
-    let minDistance = Infinity;
-
-    shape.cells.forEach(cell => {
-      const distance = Math.abs(cell.q - avgQ) + Math.abs(cell.r - avgR);
-      if (distance < minDistance) {
-        minDistance = distance;
-        closestCell = cell;
-      }
-    });
-
-    return closestCell;
+    if (shape.cells.length === 0) return { q: 0, r: 0 };
+    const origin = shape.cells.find(c => c.q === 0 && c.r === 0);
+    return origin ?? shape.cells[0];
   }
 
   /**

@@ -1,12 +1,18 @@
 import { PieceModel } from '../models/PieceModel';
 import { GridModel } from '../models/GridModel';
 import { HexCoordinates } from '../../../../shared/types/hex';
+import { PlacementValidator } from './PlacementValidator';
 
 /**
  * Validates that a set of pieces can be placed on the grid.
  * This is critical for ensuring the game is always solvable.
  */
 export class PuzzleValidator {
+  private placementValidator: PlacementValidator;
+
+  constructor() {
+    this.placementValidator = new PlacementValidator();
+  }
   // All possible orderings for 3 pieces
   private static readonly PIECE_ORDERS = [
     [0, 1, 2],
@@ -18,9 +24,10 @@ export class PuzzleValidator {
   ];
 
   /**
-   * Check if a set of pieces has at least one valid solution
+   * Check if a set of pieces has at least one valid solution.
+   * allowRotations controls whether piece rotations are considered (default: false).
    */
-  hasSolution(pieces: PieceModel[], grid: GridModel): boolean {
+  hasSolution(pieces: PieceModel[], grid: GridModel, allowRotations: boolean = false): boolean {
     if (pieces.length === 0) return true;
     if (pieces.length === 1) {
       return this.canPlaceSinglePiece(pieces[0], grid);
@@ -34,7 +41,7 @@ export class PuzzleValidator {
       if (ordersChecked >= maxOrdersToCheck) break;
       ordersChecked++;
 
-      if (this.canPlaceInOrder(pieces, grid, order)) {
+      if (this.canPlaceInOrder(pieces, grid, order, allowRotations)) {
         return true;
       }
     }
@@ -45,21 +52,27 @@ export class PuzzleValidator {
   /**
    * Check if pieces can be placed in a specific order
    */
-  private canPlaceInOrder(pieces: PieceModel[], grid: GridModel, order: number[]): boolean {
+  private canPlaceInOrder(pieces: PieceModel[], grid: GridModel, order: number[], allowRotations: boolean = false): boolean {
     // Clone the grid to simulate placement
     const simulatedGrid = grid.clone();
 
+    // Work on piece clones to avoid mutating originals during search
+    const clones = pieces.map(p => p.clone());
+
     for (const index of order) {
-      const piece = pieces[index];
-      const placement = this.findValidPlacement(piece, simulatedGrid);
+      const piece = clones[index];
+      const placement = this.findValidPlacement(piece, simulatedGrid, allowRotations);
 
       if (!placement) {
         return false; // Cannot place this piece
       }
 
-      // Place the piece on simulated grid
+      // Place the piece on simulated grid (validate the operation)
       const worldPositions = piece.getWorldPositions(placement);
-      simulatedGrid.placeCells(worldPositions, piece.getId());
+      const placed = simulatedGrid.placeCells(worldPositions, piece.getId());
+      if (!placed) {
+        return false;
+      }
 
       // Simulate line clearing
       const lines = simulatedGrid.detectCompleteLines();
@@ -72,40 +85,40 @@ export class PuzzleValidator {
   }
 
   /**
-   * Find a valid placement for a single piece
+   * Find a valid placement for a single piece using PlacementValidator
+   * This ensures consistency with actual game placement logic
    */
-  private findValidPlacement(piece: PieceModel, grid: GridModel): HexCoordinates | null {
-    const emptyCells = grid.getEmptyCells();
+  private findValidPlacement(piece: PieceModel, grid: GridModel, allowRotations: boolean = false): HexCoordinates | null {
+    // Use PlacementValidator for consistency with game logic
+    const allCells = grid.getAllCells();
 
-    // Try placing piece at each empty cell
-    for (const emptyCell of emptyCells) {
-      const worldPositions = piece.getWorldPositions(emptyCell);
-
-      if (grid.canPlaceCells(worldPositions)) {
-        return emptyCell;
+    // Try placing piece at each cell position
+    for (const cell of allCells) {
+      if (this.placementValidator.canPlacePiece(piece, cell.coordinates, grid)) {
+        return cell.coordinates;
       }
     }
 
-    // Try with rotations
-    for (let rotation = 0; rotation < 6; rotation++) {
-      piece.rotateClockwise();
+    if (allowRotations) {
+      // Try with rotations
+      for (let rotation = 0; rotation < 6; rotation++) {
+        piece.rotateClockwise();
 
-      for (const emptyCell of emptyCells) {
-        const worldPositions = piece.getWorldPositions(emptyCell);
-
-        if (grid.canPlaceCells(worldPositions)) {
-          // Reset rotation before returning
-          while (piece.getRotation() !== 0) {
-            piece.rotateClockwise();
+        for (const cell of allCells) {
+          if (this.placementValidator.canPlacePiece(piece, cell.coordinates, grid)) {
+            // Reset rotation before returning
+            while (piece.getRotation() !== 0) {
+              piece.rotateClockwise();
+            }
+            return cell.coordinates;
           }
-          return emptyCell;
         }
       }
-    }
 
-    // Reset rotation
-    while (piece.getRotation() !== 0) {
-      piece.rotateClockwise();
+      // Reset rotation
+      while (piece.getRotation() !== 0) {
+        piece.rotateClockwise();
+      }
     }
 
     return null;
@@ -114,8 +127,8 @@ export class PuzzleValidator {
   /**
    * Check if a single piece can be placed anywhere
    */
-  private canPlaceSinglePiece(piece: PieceModel, grid: GridModel): boolean {
-    return this.findValidPlacement(piece, grid) !== null;
+  canPlaceSinglePiece(piece: PieceModel, grid: GridModel, allowRotations: boolean = false): boolean {
+    return this.findValidPlacement(piece, grid, allowRotations) !== null;
   }
 
   /**
@@ -237,9 +250,9 @@ export class PuzzleValidator {
    * Check if the current grid state is in a "dead" position
    * (no pieces can be placed)
    */
-  isDeadPosition(grid: GridModel, availablePieces: PieceModel[]): boolean {
+  isDeadPosition(grid: GridModel, availablePieces: PieceModel[], allowRotations: boolean = false): boolean {
     for (const piece of availablePieces) {
-      if (this.canPlaceSinglePiece(piece, grid)) {
+      if (this.canPlaceSinglePiece(piece, grid, allowRotations)) {
         return false;
       }
     }

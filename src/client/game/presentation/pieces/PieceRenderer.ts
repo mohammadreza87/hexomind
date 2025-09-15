@@ -106,7 +106,9 @@ export class PieceRenderer {
       const pos = this.hexToPixel(coord);
       const relX = pos.x - centerX;
       const relY = pos.y - centerY;
-      const dim = this.hexSize * 2;
+      // Add spacing between piece hexagons (8% like the grid)
+      const spacing = this.hexSize * 0.08;
+      const dim = (this.hexSize - spacing) * 2;
       const img = this.scene.add.image(relX, relY, RenderConfig.TEXTURE_KEYS.HEX_FILL_SVG).setOrigin(0.5);
       img.setDisplaySize(dim, dim);
       // Ensure 30° rotation at runtime as well

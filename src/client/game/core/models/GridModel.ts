@@ -425,4 +425,15 @@ export class GridModel {
   getCellCount(): number {
     return this.cells.size;
   }
+
+  /**
+   * Clear all pieces from the grid
+   */
+  clear(): void {
+    this.cells.forEach((cell) => {
+      cell.isOccupied = false;
+      cell.pieceId = undefined;
+      cell.pieceColorIndex = undefined;
+    });
+  }
 }

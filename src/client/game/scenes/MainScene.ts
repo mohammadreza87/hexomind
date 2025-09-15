@@ -6,7 +6,15 @@ import { PieceModel } from '../core/models/PieceModel';
 import { HexCoordinates } from '../../../shared/types/hex';
 import { PieceTray } from '../presentation/pieces/PieceTray';
 import { PlacementValidator } from '../core/services/PlacementValidator';
+import { PuzzleValidator } from '../core/services/PuzzleValidator';
+import { GameOverService } from '../core/services/GameOverService';
 import { RenderConfig } from '../config/RenderConfig';
+import { errorBoundary } from '../../utils/ErrorBoundary';
+import { highScoreService } from '../../services/HighScoreService';
+import { LeaderboardUI } from '../presentation/ui/LeaderboardUI';
+import { GameOverUI } from '../presentation/ui/GameOverUI';
+import { ToastUI } from '../presentation/ui/ToastUI';
+import { SharpText } from '../utils/SharpText';
 // Asset URLs (bundled by Vite) - commented out for now since SVG not available
 // import hexSvgUrl from '../../assets/images/hex.svg';
 
@@ -19,24 +27,48 @@ export class MainScene extends Phaser.Scene {
   private pieceGenerator!: PieceGenerationService;
   private pieceTray!: PieceTray;
   private placementValidator!: PlacementValidator;
+  private puzzleValidator!: PuzzleValidator;
+  private gameOverService!: GameOverService;
 
   // UI Elements
   private scoreText!: Phaser.GameObjects.Text;
   private highScoreText!: Phaser.GameObjects.Text;
+  private leaderboardButton!: Phaser.GameObjects.Text;
+  private leaderboardUI!: LeaderboardUI;
+  private gameOverUI!: GameOverUI;
+  private toast!: ToastUI;
 
   // Game State
   private score: number = 0;
   private highScore: number = 0;
+  private hasShownGameOver: boolean = false;
   private currentPieces: PieceModel[] = [];
   private draggedPiece: PieceModel | null = null;
   private draggedRenderer: any = null; // Store the renderer for positioning
   private previewCells: HexCoordinates[] = [];
+  // Debounce game-over checks and avoid racing with tray spawn
+  private gameOverCheckTimer: Phaser.Time.TimerEvent | null = null;
+  private isSpawningSet: boolean = false;
 
   constructor() {
     super({ key: 'MainScene' });
   }
 
   preload(): void {
+    // Setup error recovery for asset loading
+    errorBoundary.registerRecoveryStrategy('assets', () => {
+      console.log('Attempting to use fallback rendering');
+      // Could switch to programmatic rendering here
+    });
+
+    // Add error handler for load failures
+    this.load.on('loaderror', (file: any) => {
+      errorBoundary.handleError(
+        new Error(`Failed to load asset: ${file.key} from ${file.url}`),
+        'assets'
+      );
+    });
+
     // Load hexagon assets
     if (RenderConfig.USE_PNG_HEXAGONS) {
       this.load.image(RenderConfig.TEXTURE_KEYS.HEX_EMPTY, RenderConfig.ASSETS.HEX_EMPTY);
@@ -71,8 +103,19 @@ export class MainScene extends Phaser.Scene {
   }
 
   create(): void {
-    // Use subpixel rendering for smoother AA on vector graphics
-    this.cameras.main.roundPixels = false;
+    // Force pixel-perfect rendering for sharp text
+    this.cameras.main.roundPixels = true;
+
+    // Apply canvas styles for optimal high-DPI rendering
+    const canvas = this.game.canvas;
+    if (canvas) {
+      // Set canvas context for sharp text
+      const context = canvas.getContext('2d');
+      if (context) {
+        context.imageSmoothingEnabled = false;
+        context.imageSmoothingQuality = 'high';
+      }
+    }
 
     // Initialize theme provider
     this.themeProvider = new NeonThemeProvider();
@@ -90,12 +133,16 @@ export class MainScene extends Phaser.Scene {
       useAdaptiveSizing: true
     });
     this.placementValidator = new PlacementValidator();
+    this.puzzleValidator = new PuzzleValidator();
+    this.gameOverService = new GameOverService(this.placementValidator);
 
     // Create piece tray
     this.pieceTray = new PieceTray(this, this.themeProvider);
 
     // Create UI
     this.createUI();
+    // Toast UI
+    this.toast = new ToastUI(this);
 
     // Setup interactions
     this.setupInteractions();
@@ -119,28 +166,72 @@ export class MainScene extends Phaser.Scene {
     const theme = this.themeProvider.getTheme();
     const { width, height } = this.cameras.main;
 
-    // Title at top
-    this.add.text(width / 2, 30, 'HEXOMIND', {
+    // Title at top - with high resolution for sharpness
+    const titleText = this.add.text(width / 2, 30, 'HEXOMIND', {
       fontSize: '36px',
       fontFamily: '"Lilita One", "Comic Sans MS", cursive',
       fontStyle: 'bold',
       color: this.themeProvider.toCSS(theme.textPrimary)
-    }).setOrigin(0.5, 0.5).setDepth(100);
+    });
+    titleText.setOrigin(0.5, 0.5).setDepth(100);
+    titleText.setResolution(window.devicePixelRatio || 1);
 
-    // Score display - smaller and above grid
+    // Score display - with high resolution
     this.scoreText = this.add.text(width / 2, height * 0.12, 'Score: 0', {
       fontSize: '24px',
       fontFamily: '"Lilita One", "Comic Sans MS", cursive',
       fontStyle: 'bold',
       color: this.themeProvider.toCSS(theme.textPrimary)
-    }).setOrigin(0.5, 0.5).setDepth(100);
+    });
+    this.scoreText.setOrigin(0.5, 0.5).setDepth(100);
+    this.scoreText.setResolution(window.devicePixelRatio || 1);
 
-    // High score display - smaller
+    // High score display - with high resolution
     this.highScoreText = this.add.text(width / 2, height * 0.16, 'Best: 0', {
       fontSize: '18px',
       fontFamily: '"Lilita One", "Comic Sans MS", cursive',
       color: this.themeProvider.toCSS(theme.textSecondary)
-    }).setOrigin(0.5, 0.5).setDepth(100);
+    });
+    this.highScoreText.setOrigin(0.5, 0.5).setDepth(100);
+    this.highScoreText.setResolution(window.devicePixelRatio || 1);
+
+    // Leaderboard button
+    this.leaderboardButton = SharpText.create(this, width - 20, 20, '🏆 Leaderboard', {
+      fontSize: '16px',
+      fontFamily: 'monospace',
+      color: '#FFD700',
+      backgroundColor: '#1a1a2e',
+      padding: { x: 10, y: 5 }
+    });
+    this.leaderboardButton.setOrigin(1, 0).setDepth(100).setInteractive();
+
+    this.leaderboardButton.on('pointerdown', () => {
+      if (!this.leaderboardUI.getIsVisible()) {
+        this.leaderboardUI.show();
+      }
+    });
+
+    this.leaderboardButton.on('pointerover', () => {
+      this.leaderboardButton.setScale(1.05);
+      this.input.setDefaultCursor('pointer');
+    });
+
+    this.leaderboardButton.on('pointerout', () => {
+      this.leaderboardButton.setScale(1);
+      this.input.setDefaultCursor('default');
+    });
+
+    // Create leaderboard UI (initially hidden)
+    this.leaderboardUI = new LeaderboardUI(this);
+
+    // Create game over UI (initially hidden)
+    this.gameOverUI = new GameOverUI(this);
+    this.gameOverUI.on('showLeaderboard', () => {
+      this.leaderboardUI.show();
+    });
+    this.gameOverUI.on('tryAgain', () => {
+      this.resetGame();
+    });
   }
 
   /**
@@ -160,14 +251,29 @@ export class MainScene extends Phaser.Scene {
 
     this.events.on('piece:dragend', (piece: PieceModel, pointer: Phaser.Input.Pointer, renderer: any, callback: (placed: boolean) => void) => {
       const placed = this.attemptPlacement(pointer, renderer);
+      // Let the tray update its internal state first
       callback(placed);
+
+      // Important: Do NOT run game-over checks immediately after a successful
+      // placement. If a line is about to clear, checking early can produce a
+      // false game over. We only check after animations complete in
+      // handleLineCompletion(). If not placed, we can safely recheck now.
+      if (!placed) {
+        if (this.gameOverCheckTimer) this.gameOverCheckTimer.remove(false);
+        this.gameOverCheckTimer = this.time.delayedCall(0, () => {
+          this.gameOverCheckTimer = null;
+          this.checkRemainingPiecesValidity();
+        });
+      }
+
       this.draggedPiece = null;
       this.draggedRenderer = null;
       this.clearPreview();
     });
 
-    // Tray empty event
+    // Tray empty event - generate new pieces when all 3 are used
     this.events.on('tray:empty', () => {
+      console.log('All pieces used - generating new set');
       this.generateNewPieces();
     });
   }
@@ -192,14 +298,142 @@ export class MainScene extends Phaser.Scene {
 
   /**
    * Generate new pieces
+   * Core rule: All 3 pieces must be placeable (in some order)
    */
   private generateNewPieces(): void {
     const grid = this.boardRenderer.getGridModel();
-    this.currentPieces = this.pieceGenerator.generatePieceSet(grid, 3);
+    const emptyCells = grid.getEmptyCells().length;
 
+    console.log('=== Generating New Pieces ===');
+    console.log(`Empty cells: ${emptyCells}, Grid fullness: ${(grid.getFullnessPercentage() * 100).toFixed(1)}%`);
+
+    // Check if grid is completely full first
+    if (emptyCells === 0) {
+      console.log('Grid is completely full - GAME OVER');
+      this.showGameOver();
+      return;
+    }
+
+    // Cancel any pending game-over checks while spawning a new set
+    if (this.gameOverCheckTimer) {
+      this.gameOverCheckTimer.remove(false);
+      this.gameOverCheckTimer = null;
+    }
+    this.isSpawningSet = true;
+
+    // Try to generate a set that is (1) solvable as a round and
+    // (2) has an immediate move under the same placement rules as players.
+    const MAX_TRIES = 30;
+    let tries = 0;
+    let accepted = false;
+
+    while (tries < MAX_TRIES && !accepted) {
+      this.currentPieces = this.pieceGenerator.generatePieceSet(grid, 3);
+
+      const roundSolvable = this.puzzleValidator.hasSolution(this.currentPieces, grid, false);
+      const immediateMove = this.gameOverService.findAnyPlayerPlaceableMove(this.currentPieces, grid) !== null;
+
+      if (roundSolvable && immediateMove) {
+        accepted = true;
+        break;
+      }
+      tries++;
+    }
+
+    if (!accepted) {
+      console.error('❌ Failed to generate an immediately playable, round-solvable set');
+      // Fallback: generate very small pieces that are guaranteed to fit
+      this.currentPieces = this.pieceGenerator.generateLineClearSet(grid);
+    }
+
+    console.log('✓ All 3 pieces can be placed');
+    const summary = this.gameOverService.getPlacementSummary(this.currentPieces, grid);
+    console.table(summary);
 
     // Display pieces in the tray
     this.pieceTray.setPieces(this.currentPieces);
+    // Mark spawn complete next tick to avoid mid-spawn checks
+    this.time.delayedCall(0, () => {
+      this.isSpawningSet = false;
+    });
+  }
+
+
+  /**
+   * Check if remaining pieces can be played
+   * Game over only when NO piece can be placed (not when some can't be placed together)
+   */
+  private checkRemainingPiecesValidity(): void {
+    const grid = this.boardRenderer.getGridModel();
+    const remaining = this.pieceTray.getRemainingPieces();
+
+    // Skip checks while a new set is being spawned to avoid transient counts
+    if (this.isSpawningSet) {
+      return;
+    }
+
+    // If tray is empty, new pieces will be generated
+    if (remaining.length === 0) {
+      return;
+    }
+
+    // First: full-round feasibility with remaining pieces (order + line clears)
+    const roundSolvable = this.puzzleValidator.hasSolution(remaining, grid, false);
+
+    // Second: immediate feasibility (at least one piece fits right now)
+    const anyPieceCanBePlaced = this.gameOverService.findAnyPlayerPlaceableMove(remaining, grid) !== null;
+
+    // Only game over if no immediate move AND the remaining set is not solvable
+    if (!anyPieceCanBePlaced && !roundSolvable) {
+      const emptyCells = grid.getEmptyCells().length;
+      console.log('=== GAME OVER - No pieces can be placed and set is unsolvable ===');
+      console.log(`Remaining pieces: ${remaining.length}`);
+      console.log(`Empty cells: ${emptyCells}`);
+      const summary = this.gameOverService.getPlacementSummary(remaining, grid);
+      console.table(summary);
+      this.showGameOver();
+    }
+  }
+
+  /**
+   * Show game over screen
+   */
+  private showGameOver(): void {
+    if (this.hasShownGameOver) return;
+    this.hasShownGameOver = true;
+    // Clear any remaining pieces (this stops interactions)
+    this.pieceTray.clear();
+    // Show 'no more space' toast first, then the panel
+    this.toast
+      .show('No more space')
+      .then(() => this.gameOverUI.show(this.score, this.highScore));
+  }
+
+  /**
+   * Reset the game for a new play
+   */
+  private resetGame(): void {
+    console.log('Resetting game...');
+
+    // Reset scores
+    this.score = 0;
+    this.scoreText.setText(`Score: ${this.score.toLocaleString()}`);
+
+    // Clear the board
+    const grid = this.boardRenderer.getGridModel();
+    grid.clear();
+    this.boardRenderer.updateBoard();
+
+    // Clear current pieces first
+    this.currentPieces = [];
+    this.pieceTray.clear();
+
+    // Generate new pieces after a small delay to ensure everything is cleared
+    this.time.delayedCall(100, () => {
+      console.log('Generating new pieces...');
+      this.generateNewPieces();
+    });
+    this.hasShownGameOver = false;
   }
 
   /**
@@ -246,61 +480,72 @@ export class MainScene extends Phaser.Scene {
    * Attempt to place piece
    */
   private attemptPlacement(pointer: Phaser.Input.Pointer, renderer: any): boolean {
-    if (!this.draggedPiece) return false;
+    return errorBoundary.safeExecute(() => {
+      if (!this.draggedPiece) return false;
 
-    // Get board position
-    const boardCoords = this.boardRenderer.pixelToHex(pointer.x, pointer.y);
-    if (!boardCoords) return false;
+      // Get board position
+      const boardCoords = this.boardRenderer.pixelToHex(pointer.x, pointer.y);
+      if (!boardCoords) return false;
 
-    // Check if placement is valid
-    const grid = this.boardRenderer.getGridModel();
-    const canPlace = this.placementValidator.canPlacePiece(
-      this.draggedPiece,
-      boardCoords,
-      grid
-    );
+      // Check if placement is valid
+      const grid = this.boardRenderer.getGridModel();
+      const canPlace = this.placementValidator.canPlacePiece(
+        this.draggedPiece,
+        boardCoords,
+        grid
+      );
 
-    if (!canPlace) return false;
+      if (!canPlace) return false;
 
-    // Place the piece
-    const placement = this.placementValidator.getPlacementCells(
-      this.draggedPiece,
-      boardCoords
-    );
+      // Place the piece
+      const placement = this.placementValidator.getPlacementCells(
+        this.draggedPiece,
+        boardCoords
+      );
 
-    placement.forEach(coord => {
-      grid.setCellOccupied(coord, true, this.draggedPiece.getId(), this.draggedPiece.getColorIndex());
-    });
+      placement.forEach(coord => {
+        grid.setCellOccupied(coord, true, this.draggedPiece.getId(), this.draggedPiece.getColorIndex());
+      });
 
-    // Remove the dragged piece visual (it will be shown by the board cells)
-    if (renderer && renderer.getContainer) {
-      const container = renderer.getContainer();
-      // First remove all listeners and interactivity
-      if (container.input) {
-        container.removeInteractive();
+      // Remove the dragged piece visual (it will be shown by the board cells)
+      if (renderer && renderer.getContainer) {
+        const container = renderer.getContainer();
+        // First remove all listeners and interactivity
+        if (container.input) {
+          container.removeInteractive();
+        }
+        container.removeAllListeners();
+        // Now safely destroy
+        container.destroy();
       }
-      container.removeAllListeners();
-      // Now safely destroy
-      container.destroy();
-    }
 
-    // Force board to re-render to show placed pieces
-    this.boardRenderer.updateBoard();
+      // Force board to re-render to show placed pieces
+      this.boardRenderer.updateBoard();
 
-    // Calculate points
-    const piecePoints = placement.length * 10;
-    this.updateScore(piecePoints);
+      // Calculate points
+      const piecePoints = placement.length * 10;
+      this.updateScore(piecePoints);
 
     // Check for complete lines
     const lines = grid.detectCompleteLines();
     if (lines.length > 0) {
+      // Handle line clearing with animations and scoring; game-over check
+      // happens after line clear completes inside handleLineCompletion.
       this.handleLineCompletion(lines);
+    } else {
+      // No lines to clear – re-evaluate remaining pieces immediately.
+      if (this.gameOverCheckTimer) this.gameOverCheckTimer.remove(false);
+      this.gameOverCheckTimer = this.time.delayedCall(0, () => {
+        this.gameOverCheckTimer = null;
+        this.checkRemainingPiecesValidity();
+      });
     }
 
-    // Success effect
-    this.showPlacementEffect(boardCoords);
+      // Success effect
+      this.showPlacementEffect(boardCoords);
 
-    return true;
+      return true;
+    }, false, 'piece-placement');
   }
 
   /**
@@ -310,18 +555,37 @@ export class MainScene extends Phaser.Scene {
     const pos = this.boardRenderer.hexToPixel(coords);
     if (!pos) return;
 
-    // Create pulse effect
-    const circle = this.add.circle(pos.x, pos.y, 10, 0xffffff, 0.8);
+    // Create quick pulse effect
+    const circle = this.add.circle(pos.x, pos.y, 5, 0xffffff, 1);
     circle.setDepth(150);
 
     this.tweens.add({
       targets: circle,
-      scale: 3,
+      scale: 4,
       alpha: 0,
-      duration: 400,
-      ease: 'Power2',
+      duration: 200,
+      ease: 'Expo.easeOut',
       onComplete: () => circle.destroy()
     });
+
+    // Add small particles for extra juice
+    for (let i = 0; i < 4; i++) {
+      const particle = this.add.circle(pos.x, pos.y, 2, 0xffffff, 0.6);
+      particle.setDepth(149);
+
+      const angle = (Math.PI * 2 / 4) * i;
+      const distance = 20;
+
+      this.tweens.add({
+        targets: particle,
+        x: pos.x + Math.cos(angle) * distance,
+        y: pos.y + Math.sin(angle) * distance,
+        alpha: 0,
+        duration: 250,
+        ease: 'Power2',
+        onComplete: () => particle.destroy()
+      });
+    }
   }
 
   /**
@@ -344,14 +608,19 @@ export class MainScene extends Phaser.Scene {
     // Visual feedback
     this.showLinesClearedEffect(lines.length, totalPoints);
 
-    // Generate new pieces if all current pieces have been placed
-    // TODO: Implement piece tracking
+    // After clearing lines, check if remaining pieces can still be placed
+    // Line clears create space, but pieces might still be unplaceable
+    if (this.gameOverCheckTimer) this.gameOverCheckTimer.remove(false);
+    this.gameOverCheckTimer = this.time.delayedCall(0, () => {
+      this.gameOverCheckTimer = null;
+      this.checkRemainingPiecesValidity();
+    });
   }
 
   /**
    * Update score
    */
-  private updateScore(points: number): void {
+  private async updateScore(points: number): Promise<void> {
     this.score += points;
     this.scoreText.setText(`Score: ${this.score.toLocaleString()}`);
 
@@ -359,6 +628,19 @@ export class MainScene extends Phaser.Scene {
     if (this.score > this.highScore) {
       this.highScore = this.score;
       this.highScoreText.setText(`Best: ${this.highScore.toLocaleString()}`);
+
+      // Submit to Reddit KV storage
+      try {
+        const result = await highScoreService.submitScore(this.score);
+        if (result.updated && result.rank) {
+          console.log(`New high score! Rank: #${result.rank}`);
+          // Could show rank in UI
+        }
+      } catch (error) {
+        console.error('Failed to submit high score:', error);
+      }
+
+      // Also save locally as fallback
       this.saveHighScore();
 
       // Animate high score
@@ -416,22 +698,31 @@ export class MainScene extends Phaser.Scene {
       color: this.themeProvider.toCSS(theme.scorePrimary)
     }).setOrigin(0.5).setAlpha(0).setDepth(200);
 
-    // Animate in
+    // Faster, punchier animation
     this.tweens.add({
       targets: [effectText, pointsText],
       alpha: 1,
-      scale: { from: 0.5, to: 1 },
-      duration: 300,
-      ease: 'Back.easeOut',
+      scale: { from: 0.8, to: 1.1 },
+      duration: 150,
+      ease: 'Expo.easeOut',
       onComplete: () => {
-        // Animate out after delay
+        // Quick settle
+        this.tweens.add({
+          targets: [effectText, pointsText],
+          scale: 1,
+          duration: 100,
+          ease: 'Sine.easeInOut'
+        });
+
+        // Animate out after shorter delay
         this.tweens.add({
           targets: [effectText, pointsText],
           alpha: 0,
-          y: '-=50',
-          duration: 500,
-          delay: 1000,
-          ease: 'Power2',
+          scale: 0.8,
+          y: '-=30',
+          duration: 200,
+          delay: 400,
+          ease: 'Power3.easeIn',
           onComplete: () => {
             effectText.destroy();
             pointsText.destroy();
@@ -484,9 +775,22 @@ export class MainScene extends Phaser.Scene {
   }
 
   /**
-   * Load high score from local storage
+   * Load high score from Reddit KV or local storage
    */
-  private loadHighScore(): void {
+  private async loadHighScore(): Promise<void> {
+    try {
+      // Try to load from Reddit KV first
+      const serverHighScore = await highScoreService.getHighScore();
+      if (serverHighScore > 0) {
+        this.highScore = serverHighScore;
+        this.highScoreText.setText(`Best: ${this.highScore.toLocaleString()}`);
+        return;
+      }
+    } catch (error) {
+      console.error('Failed to load high score from server:', error);
+    }
+
+    // Fallback to local storage
     const saved = localStorage.getItem('hexomind_highscore');
     if (saved) {
       this.highScore = parseInt(saved, 10) || 0;

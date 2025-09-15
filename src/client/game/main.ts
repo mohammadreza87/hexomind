@@ -3,19 +3,26 @@ import { MainScene } from './scenes/MainScene';
 
 /**
  * Hexomind Game Configuration
- * Clean setup with only the essential game scene
+ * Optimized for Reddit Devvit with high-DPI support
  */
+
+// Calculate optimal dimensions with DPR consideration
+const dpr = Math.max(window.devicePixelRatio || 1, 2); // Minimum 2x for sharpness
+const baseWidth = 800;
+const baseHeight = 900;
+
 const config: Phaser.Types.Core.GameConfig = {
-  type: Phaser.AUTO,
+  type: Phaser.WEBGL, // Force WebGL for better performance
   parent: 'game-container',
   backgroundColor: '#1a1a1b', // Reddit dark mode default
-  // Use full device pixel ratio for maximum crispness
-  resolution: window.devicePixelRatio || 1,
+  // Enhanced resolution - use at least 2x for sharp rendering
+  resolution: dpr,
   scale: {
-    mode: Phaser.Scale.RESIZE,
+    mode: Phaser.Scale.FIT, // Fit to container while maintaining aspect ratio
     autoCenter: Phaser.Scale.CENTER_BOTH,
-    width: '100%',
-    height: '100%',
+    width: baseWidth,
+    height: baseHeight,
+    parent: 'game-container'
   },
   scene: [MainScene],
   physics: {
@@ -26,10 +33,11 @@ const config: Phaser.Types.Core.GameConfig = {
     }
   },
   render: {
-    // Enable high quality rendering
+    // Maximum quality settings for sharp rendering
     antialias: true,
+    antialiasGL: true, // WebGL antialiasing
     pixelArt: false,
-    roundPixels: false,
+    roundPixels: true, // Snap to pixels for sharper text
     transparent: false,
     clearBeforeRender: true,
     preserveDrawingBuffer: false,
@@ -37,7 +45,12 @@ const config: Phaser.Types.Core.GameConfig = {
     powerPreference: 'high-performance',
     batchSize: 4096,
     maxTextures: -1,
-    maxLights: 10
+    maxLights: 10,
+    desynchronized: true, // Better performance
+    failIfMajorPerformanceCaveat: false,
+    // WebGL specific for better quality
+    autoMobilePipeline: false,
+    multiTexture: true
   }
 };
 
