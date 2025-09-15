@@ -297,6 +297,53 @@ export class PieceTray {
   }
 
   /**
+   * Get pieces for saving game state
+   */
+  getPiecesForSave(): Array<{ type: any; color: any; used: boolean }> {
+    const pieces: Array<{ type: any; color: any; used: boolean }> = [];
+
+    // Add current pieces in tray (not used)
+    this.pieceRenderers.forEach((renderer) => {
+      const piece = renderer.getPiece();
+      pieces.push({
+        type: piece.getShape(),
+        color: piece.getColorIndex(),
+        used: false
+      });
+    });
+
+    // Fill remaining slots with empty markers if needed
+    while (pieces.length < this.SLOT_COUNT) {
+      pieces.push({
+        type: null,
+        color: 0,
+        used: true
+      });
+    }
+
+    return pieces;
+  }
+
+  /**
+   * Restore pieces from saved game
+   */
+  restorePieces(savedPieces: Array<{ type: any; color: any; used: boolean }>): void {
+    // Clear current pieces
+    this.clear();
+
+    // Create PieceModel instances from saved pieces that aren't used
+    const piecesToRestore: PieceModel[] = [];
+    savedPieces.forEach(savedPiece => {
+      if (!savedPiece.used && savedPiece.type !== null) {
+        piecesToRestore.push(new PieceModel(savedPiece.type, savedPiece.color));
+      }
+    });
+
+    // Use setPieces to add them to the tray
+    this.setPieces(piecesToRestore);
+  }
+
+  /**
    * Clear all pieces
    */
   clear(): void {

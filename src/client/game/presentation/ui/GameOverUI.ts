@@ -170,12 +170,10 @@ export class GameOverUI extends Phaser.GameObjects.Container {
 
     bg.on('pointerdown', onClick);
     bg.on('pointerover', () => {
-      bg.setScale(1.05);
       bg.setAlpha(1);
       scene.input.setDefaultCursor('pointer');
     });
     bg.on('pointerout', () => {
-      bg.setScale(1);
       bg.setAlpha(0.9);
       scene.input.setDefaultCursor('default');
     });
@@ -218,15 +216,7 @@ export class GameOverUI extends Phaser.GameObjects.Container {
       ease: 'Power2'
     });
 
-    // Pulse animation for try again button
-    this.scene.tweens.add({
-      targets: this.tryAgainButton,
-      scale: { from: 0.95, to: 1.05 },
-      duration: 800,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut'
-    });
+    // No animation for try again button - keep it static
   }
 
   /**

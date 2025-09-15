@@ -17,6 +17,7 @@ import { ToastUI } from '../presentation/ui/ToastUI';
 import { SharpText } from '../utils/SharpText';
 import { DS } from '../config/DesignSystem';
 import { createGradientText } from '../presentation/ui/GradientText';
+import { GameStateManager } from '../services/GameStateManager';
 // Asset URLs (bundled by Vite) - commented out for now since SVG not available
 // import hexSvgUrl from '../../assets/images/hex.svg';
 
@@ -45,6 +46,7 @@ export class MainScene extends Phaser.Scene {
   private highScore: number = 0;
   private hasShownGameOver: boolean = false;
   private currentPieces: PieceModel[] = [];
+  private moveCount: number = 0;
   private draggedPiece: PieceModel | null = null;
   private draggedRenderer: any = null; // Store the renderer for positioning
   private previewCells: HexCoordinates[] = [];
@@ -157,8 +159,11 @@ export class MainScene extends Phaser.Scene {
     // Load high score
     this.loadHighScore();
 
-    // Start the game
-    this.startNewGame();
+    // Check for saved game and restore or start new
+    if (!this.restoreSavedGame()) {
+      // Start a new game if no save exists
+      this.startNewGame();
+    }
   }
 
   /**
@@ -307,18 +312,99 @@ export class MainScene extends Phaser.Scene {
    * Start a new game
    */
   private startNewGame(): void {
-    // Reset score
+    // Reset score and move count
     this.score = 0;
+    this.moveCount = 0;
     this.updateScore(0);
 
     // Clear board
     this.boardRenderer.getGridModel().reset();
+
+    // Clear saved game state
+    GameStateManager.clearGameState();
 
     // Generate initial pieces
     this.generateNewPieces();
 
     // Show welcome animation
     this.showWelcomeAnimation();
+  }
+
+  /**
+   * Restore saved game state
+   */
+  private restoreSavedGame(): boolean {
+    const savedGame = GameStateManager.loadGameState();
+    if (!savedGame) return false;
+
+    try {
+      console.log('Restoring saved game...');
+
+      // Restore grid state
+      const grid = this.boardRenderer.getGridModel();
+      grid.reset();
+
+      // Restore cells
+      savedGame.grid.forEach(cell => {
+        grid.setCellOccupied(
+          { q: cell.q, r: cell.r },
+          true,
+          undefined,
+          cell.color
+        );
+      });
+
+      // Force board to re-render
+      this.boardRenderer.updateBoard();
+
+      // Restore score and move count
+      this.score = savedGame.score;
+      this.moveCount = savedGame.moveCount;
+      // Use the higher of saved high score or current high score
+      this.highScore = Math.max(this.highScore, savedGame.highScore);
+      this.updateScore(0); // Update display without adding points
+      this.highScoreText.setText(`Best: ${this.highScore.toLocaleString()}`);
+
+      // Restore pieces
+      this.pieceTray.restorePieces(savedGame.pieces);
+
+      console.log(`Game restored: Score ${this.score}, ${savedGame.grid.length} cells, ${savedGame.pieces.filter(p => !p.used).length} pieces remaining`);
+
+      // Show toast
+      if (this.toast) {
+        this.toast.show('Game restored');
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Failed to restore game:', error);
+      GameStateManager.clearGameState();
+      return false;
+    }
+  }
+
+  /**
+   * Save current game state
+   */
+  private saveGameState(): void {
+    const grid = this.boardRenderer.getGridModel();
+    const pieces = this.pieceTray.getPiecesForSave();
+
+    // Convert grid to color map
+    const gridMap = new Map<string, number>();
+    grid.getAllCells().forEach(cell => {
+      if (cell.isOccupied && cell.pieceColorIndex !== undefined) {
+        gridMap.set(`${cell.coordinates.q},${cell.coordinates.r}`, cell.pieceColorIndex);
+      }
+    });
+
+    GameStateManager.saveGameState(
+      gridMap,
+      pieces,
+      this.score,
+      this.highScore,
+      this.moveCount
+    );
   }
 
   /**
@@ -426,11 +512,10 @@ export class MainScene extends Phaser.Scene {
   private showGameOver(): void {
     if (this.hasShownGameOver) return;
     this.hasShownGameOver = true;
-    // Clear any remaining pieces (this stops interactions)
-    this.pieceTray.clear();
+    // Don't clear remaining pieces - let player see what was left
     // Show 'no more space' toast first, then the panel
     this.toast
-      .show('No more space')
+      .show('No more space', { type: 'important' })
       .then(() => this.gameOverUI.show(this.score, this.highScore));
   }
 
@@ -551,6 +636,10 @@ export class MainScene extends Phaser.Scene {
       const piecePoints = placement.length * 10;
       this.updateScore(piecePoints);
 
+      // Increment move count and save game state
+      this.moveCount++;
+      this.saveGameState();
+
     // Check for complete lines
     const lines = grid.detectCompleteLines();
     if (lines.length > 0) {
@@ -633,6 +722,9 @@ export class MainScene extends Phaser.Scene {
     // Visual feedback
     this.showLinesClearedEffect(lines.length, totalPoints);
 
+    // Save game state after line clear
+    this.saveGameState();
+
     // After clearing lines, check if remaining pieces can still be placed
     // Line clears create space, but pieces might still be unplaceable
     if (this.gameOverCheckTimer) this.gameOverCheckTimer.remove(false);
@@ -694,9 +786,6 @@ export class MainScene extends Phaser.Scene {
    * Show lines cleared effect
    */
   private showLinesClearedEffect(lineCount: number, points: number): void {
-    const theme = this.themeProvider.getTheme();
-    const { width, height } = this.cameras.main;
-
     // Create combo text
     let comboText = '';
     if (lineCount === 1) {
@@ -709,54 +798,15 @@ export class MainScene extends Phaser.Scene {
       comboText = `${lineCount}x COMBO!`;
     }
 
-    const effectText = this.add.text(width / 2, height / 2 - 30, comboText, {
-      fontSize: '32px',
-      fontFamily: '"Lilita One", "Comic Sans MS", cursive',
-      fontStyle: 'bold',
-      color: this.themeProvider.toCSS(theme.scoreBonus)
-    }).setOrigin(0.5).setAlpha(0).setDepth(200);
-
-    const pointsText = this.add.text(width / 2, height / 2 + 10, `+${points}`, {
-      fontSize: '24px',
-      fontFamily: '"Lilita One", "Comic Sans MS", cursive',
-      fontStyle: 'bold',
-      color: this.themeProvider.toCSS(theme.scorePrimary)
-    }).setOrigin(0.5).setAlpha(0).setDepth(200);
-
-    // Faster, punchier animation
-    this.tweens.add({
-      targets: [effectText, pointsText],
-      alpha: 1,
-      scale: { from: 0.8, to: 1.1 },
-      duration: 150,
-      ease: 'Expo.easeOut',
-      onComplete: () => {
-        // Quick settle
-        this.tweens.add({
-          targets: [effectText, pointsText],
-          scale: 1,
-          duration: 100,
-          ease: 'Sine.easeInOut'
-        });
-
-        // Animate out after shorter delay
-        this.tweens.add({
-          targets: [effectText, pointsText],
-          alpha: 0,
-          scale: 0.8,
-          y: '-=30',
-          duration: 200,
-          delay: 400,
-          ease: 'Power3.easeIn',
-          onComplete: () => {
-            effectText.destroy();
-            pointsText.destroy();
-          }
-        });
-      }
-    });
-
-    // Removed screen flash for cleaner animation
+    // Use the new ToastUI system with score type for beautiful gradient text
+    if (this.toastUI) {
+      this.toastUI.show(comboText, {
+        type: 'score',
+        score: points,
+        duration: 150,
+        hold: 600
+      });
+    }
   }
 
   /**
@@ -768,7 +818,8 @@ export class MainScene extends Phaser.Scene {
 
     const welcomeText = this.add.text(width / 2, height / 2, 'TAP TO PLACE PIECES', {
       fontSize: '24px',
-      fontFamily: 'system-ui, -apple-system, sans-serif',
+      fontFamily: DS.TYPOGRAPHY.fontFamily.body,
+      fontStyle: '500 normal',
       color: this.themeProvider.toCSS(theme.textSecondary)
     }).setOrigin(0.5).setAlpha(0).setDepth(150);
 
@@ -803,23 +854,38 @@ export class MainScene extends Phaser.Scene {
    * Load high score from Reddit KV or local storage
    */
   private async loadHighScore(): Promise<void> {
+    let bestScore = 0;
+
     try {
       // Try to load from Reddit KV first
       const serverHighScore = await highScoreService.getHighScore();
       if (serverHighScore > 0) {
-        this.highScore = serverHighScore;
-        this.highScoreText.setText(`Best: ${this.highScore.toLocaleString()}`);
-        return;
+        bestScore = Math.max(bestScore, serverHighScore);
       }
     } catch (error) {
       console.error('Failed to load high score from server:', error);
     }
 
-    // Fallback to local storage
+    // Check local storage
     const saved = localStorage.getItem('hexomind_highscore');
     if (saved) {
-      this.highScore = parseInt(saved, 10) || 0;
-      this.highScoreText.setText(`Best: ${this.highScore.toLocaleString()}`);
+      const localHighScore = parseInt(saved, 10) || 0;
+      bestScore = Math.max(bestScore, localHighScore);
+    }
+
+    // Check saved game state
+    const savedGame = GameStateManager.loadGameState();
+    if (savedGame && savedGame.highScore) {
+      bestScore = Math.max(bestScore, savedGame.highScore);
+    }
+
+    // Set the best score from all sources
+    this.highScore = bestScore;
+    this.highScoreText.setText(`Best: ${this.highScore.toLocaleString()}`);
+
+    // Save it back to ensure consistency
+    if (this.highScore > 0) {
+      localStorage.setItem('hexomind_highscore', this.highScore.toString());
     }
   }
 
@@ -828,6 +894,8 @@ export class MainScene extends Phaser.Scene {
    */
   private saveHighScore(): void {
     localStorage.setItem('hexomind_highscore', this.highScore.toString());
+    // Also update the saved game state if it exists
+    this.saveGameState();
   }
 
   update(time: number, delta: number): void {
