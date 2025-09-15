@@ -12,6 +12,8 @@ import { RenderConfig } from '../config/RenderConfig';
 import { errorBoundary } from '../../utils/ErrorBoundary';
 import { highScoreService } from '../../services/HighScoreService';
 import { LeaderboardUI } from '../presentation/ui/LeaderboardUI';
+import { ModernLeaderboardUI } from '../presentation/ui/ModernLeaderboardUI';
+import { SettingsUI } from '../presentation/ui/SettingsUI';
 import { GameOverUI } from '../presentation/ui/GameOverUI';
 import { ToastUI } from '../presentation/ui/ToastUI';
 import { SharpText } from '../utils/SharpText';
@@ -36,8 +38,10 @@ export class MainScene extends Phaser.Scene {
   // UI Elements
   private scoreText!: Phaser.GameObjects.Text;
   private highScoreText!: Phaser.GameObjects.Text;
-  private leaderboardButton!: Phaser.GameObjects.Text;
+  private settingsButton!: Phaser.GameObjects.Container;
+  private settingsUI!: SettingsUI;
   private leaderboardUI!: LeaderboardUI;
+  private modernLeaderboardUI!: ModernLeaderboardUI;
   private gameOverUI!: GameOverUI;
   private toast!: ToastUI;
 
@@ -160,7 +164,16 @@ export class MainScene extends Phaser.Scene {
     this.loadHighScore();
 
     // Check for saved game and restore or start new
-    if (!this.restoreSavedGame()) {
+    // Only restore if there's a valid saved game (not a game-over state)
+    const savedGame = GameStateManager.loadGameState();
+    if (savedGame && savedGame.grid && savedGame.grid.length > 0) {
+      // Check if the saved state is likely a game-over state
+      // (e.g., if pieces can't be placed)
+      if (!this.restoreSavedGame()) {
+        // If restore fails, start new game
+        this.startNewGame();
+      }
+    } else {
       // Start a new game if no save exists
       this.startNewGame();
     }
@@ -218,49 +231,85 @@ export class MainScene extends Phaser.Scene {
     this.highScoreText.setOrigin(0.5, 0.5).setDepth(DS.LAYERS.ui);
     this.highScoreText.setResolution(window.devicePixelRatio || 1);
 
-    // Leaderboard button with proper spacing
-    this.leaderboardButton = SharpText.create(
-      this,
-      width - DS.SPACING.lg,
-      DS.SPACING.lg,
-      '🏆 Leaderboard',
-      {
-        fontSize: DS.TYPOGRAPHY.fontSize.base,
-        fontFamily: DS.TYPOGRAPHY.fontFamily.body,
-        fontStyle: 'normal',
-        color: DS.COLORS.solid.warning,
-        backgroundColor: DS.COLORS.glass.background,
-        padding: { x: DS.SPACING.md, y: DS.SPACING.sm }
-      }
-    );
-    this.leaderboardButton.setOrigin(1, 0).setDepth(DS.LAYERS.ui).setInteractive();
+    // Settings button - modern styled button
+    this.createSettingsButton(width - DS.SPACING.xl, DS.SPACING.xl);
 
-    this.leaderboardButton.on('pointerdown', () => {
-      if (!this.leaderboardUI.getIsVisible()) {
-        this.leaderboardUI.show();
-      }
+    // Create settings UI (initially hidden)
+    this.settingsUI = new SettingsUI(this);
+    this.settingsUI.on('showLeaderboard', () => {
+      this.modernLeaderboardUI.show(this.score);
+    });
+    this.settingsUI.on('resetGame', () => {
+      this.resetGame();
+      localStorage.removeItem('hexomind_gamestate');
+      localStorage.removeItem('hexomind_highscore');
+      this.score = 0;
+      this.highScore = 0;
+      this.scoreText.setText(`Score: 0`);
+      this.highScoreText.setText(`Best: 0`);
     });
 
-    this.leaderboardButton.on('pointerover', () => {
-      this.leaderboardButton.setScale(1.05);
-      this.input.setDefaultCursor('pointer');
-    });
+    // Create modern leaderboard UI (initially hidden)
+    this.modernLeaderboardUI = new ModernLeaderboardUI(this);
 
-    this.leaderboardButton.on('pointerout', () => {
-      this.leaderboardButton.setScale(1);
-      this.input.setDefaultCursor('default');
-    });
-
-    // Create leaderboard UI with modern design (initially hidden)
+    // Keep old leaderboard for compatibility
     this.leaderboardUI = new LeaderboardUI(this);
 
     // Create game over UI with modern design (initially hidden)
     this.gameOverUI = new GameOverUI(this);
     this.gameOverUI.on('showLeaderboard', () => {
-      this.leaderboardUI.show();
+      this.modernLeaderboardUI.show(this.score);
     });
     this.gameOverUI.on('tryAgain', () => {
       this.resetGame();
+    });
+  }
+
+  /**
+   * Create settings button
+   */
+  private createSettingsButton(x: number, y: number): void {
+    this.settingsButton = this.add.container(x, y);
+
+    // Button background
+    const bg = this.add.rectangle(0, 0, 120, 36,
+      DS.hexToNumber(DS.COLORS.glass.background), 0.9
+    );
+    bg.setStrokeStyle(1, DS.hexToNumber(DS.COLORS.glass.border), 0.5);
+    bg.setInteractive();
+
+    // Settings icon
+    const icon = this.add.text(-35, 0, '⚙️', {
+      fontSize: '20px',
+      fontFamily: DS.TYPOGRAPHY.fontFamily.body
+    }).setOrigin(0.5);
+
+    // Text
+    const text = this.add.text(10, 0, 'Settings', {
+      fontSize: DS.TYPOGRAPHY.fontSize.sm,
+      fontFamily: DS.TYPOGRAPHY.fontFamily.display,
+      fontStyle: '600 normal',
+      color: DS.COLORS.solid.info
+    }).setOrigin(0.5);
+
+    this.settingsButton.add([bg, icon, text]);
+    this.settingsButton.setDepth(DS.LAYERS.ui);
+
+    // Interactions
+    bg.on('pointerover', () => {
+      bg.setScale(1.05);
+      bg.setAlpha(1);
+      this.input.setDefaultCursor('pointer');
+    });
+
+    bg.on('pointerout', () => {
+      bg.setScale(1);
+      bg.setAlpha(0.9);
+      this.input.setDefaultCursor('default');
+    });
+
+    bg.on('pointerdown', () => {
+      this.settingsUI.show();
     });
   }
 
@@ -512,6 +561,11 @@ export class MainScene extends Phaser.Scene {
   private showGameOver(): void {
     if (this.hasShownGameOver) return;
     this.hasShownGameOver = true;
+
+    // Clear saved game state immediately so restarting gives a fresh game
+    GameStateManager.clearGameState();
+    console.log('Game over - cleared saved game state');
+
     // Don't clear remaining pieces - let player see what was left
     // Show 'no more space' toast first, then the panel
     this.toast
@@ -525,8 +579,12 @@ export class MainScene extends Phaser.Scene {
   private resetGame(): void {
     console.log('Resetting game...');
 
-    // Reset scores
+    // Clear any saved game state to ensure fresh start
+    GameStateManager.clearGameState();
+
+    // Reset scores and move count
     this.score = 0;
+    this.moveCount = 0;
     this.scoreText.setText(`Score: ${this.score.toLocaleString()}`);
 
     // Clear the board

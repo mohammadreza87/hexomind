@@ -9,12 +9,15 @@ import {
   getGlobalLeaderboard,
   getDailyLeaderboard,
   updateDailyLeaderboard,
+  getWeeklyLeaderboard,
+  updateWeeklyLeaderboard,
   getSubredditLeaderboard,
   updateSubredditLeaderboard,
   getUserRank,
   getGameStatistics,
   incrementGamesPlayed
 } from './api/highscores';
+import { initializeLeaderboards, ensurePlayerInLeaderboard } from './api/dummyData';
 
 const app = express();
 
@@ -32,6 +35,19 @@ router.get<{ postId: string }, InitResponse | { status: string; message: string 
   async (_req, res): Promise<void> => {
     const { postId } = context;
 
+    // Log all available context properties for debugging
+    console.log('Devvit context:', {
+      postId: context.postId,
+      subredditName: context.subredditName,
+      userId: context.userId,
+      username: context.username,
+      // Try various possible property names
+      author: (context as any).author,
+      authorName: (context as any).authorName,
+      user: (context as any).user,
+      allKeys: Object.keys(context)
+    });
+
     if (!postId) {
       console.error('API Init Error: postId not found in devvit context');
       res.status(400).json({
@@ -47,6 +63,8 @@ router.get<{ postId: string }, InitResponse | { status: string; message: string 
         type: 'init',
         postId: postId,
         count: count ? parseInt(count) : 0,
+        // Include username if available
+        username: context.username || (context as any).author || null
       });
     } catch (error) {
       console.error(`API Init Error for post ${postId}:`, error);
@@ -171,29 +189,58 @@ router.post('/api/highscore', async (req, res): Promise<void> => {
       return;
     }
 
-    const updated = await setUserHighScore(username, score);
+    // Set a timeout for the entire operation
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Operation timeout')), 4000)
+    );
 
-    // Update daily leaderboard
-    await updateDailyLeaderboard(username, score);
+    // Run all operations with timeout
+    const result = await Promise.race([
+      timeoutPromise,
+      (async () => {
+        const updated = await setUserHighScore(username, score);
 
-    // Update subreddit leaderboard if we have context
-    if (context.subredditName) {
-      await updateSubredditLeaderboard(username, score, context.subredditName);
-    }
+        // Ensure player appears in all leaderboards
+        await ensurePlayerInLeaderboard(username, score);
 
-    // Increment games played counter
-    await incrementGamesPlayed();
+        // Fire and forget for non-critical updates to avoid blocking
+        Promise.all([
+          updateDailyLeaderboard(username, score).catch(err =>
+            console.error('Failed to update daily leaderboard:', err)
+          ),
+          updateWeeklyLeaderboard(username, score).catch(err =>
+            console.error('Failed to update weekly leaderboard:', err)
+          ),
+          context.subredditName ?
+            updateSubredditLeaderboard(username, score, context.subredditName).catch(err =>
+              console.error('Failed to update subreddit leaderboard:', err)
+            ) : Promise.resolve(),
+          incrementGamesPlayed().catch(err =>
+            console.error('Failed to increment games played:', err)
+          )
+        ]);
 
-    const rank = await getUserRank(username);
+        // Only get rank if score was updated
+        const rank = updated ? await getUserRank(username) : null;
+        const highScore = updated ? score : await getUserHighScore(username);
 
-    res.json({
-      updated,
-      highScore: updated ? score : await getUserHighScore(username),
-      rank
-    });
+        return {
+          updated,
+          highScore,
+          rank
+        };
+      })()
+    ]);
+
+    res.json(result);
   } catch (error) {
-    console.error('Error setting high score:', error);
-    res.status(500).json({ error: 'Failed to set high score' });
+    if (error instanceof Error && error.message === 'Operation timeout') {
+      console.error('Highscore operation timed out');
+      res.status(408).json({ error: 'Request timeout' });
+    } else {
+      console.error('Error setting high score:', error);
+      res.status(500).json({ error: 'Failed to set high score' });
+    }
   }
 });
 
@@ -203,14 +250,43 @@ router.get('/api/leaderboard', async (req, res): Promise<void> => {
     const type = req.query.type as string || 'global';
     const date = req.query.date as string;
 
+    console.log(`Fetching ${type} leaderboard with limit ${limit}`);
+
     let leaderboard;
     if (type === 'daily') {
       const today = date || new Date().toISOString().split('T')[0];
+      console.log(`Fetching daily leaderboard for ${today}`);
       leaderboard = await getDailyLeaderboard(today, limit);
+    } else if (type === 'weekly') {
+      console.log('Fetching weekly leaderboard');
+      leaderboard = await getWeeklyLeaderboard(limit);
     } else if (type === 'subreddit' && context.subredditName) {
+      console.log(`Fetching subreddit leaderboard for ${context.subredditName}`);
       leaderboard = await getSubredditLeaderboard(context.subredditName, limit);
     } else {
+      console.log('Fetching global leaderboard');
       leaderboard = await getGlobalLeaderboard(limit);
+    }
+
+    console.log(`Leaderboard result: ${leaderboard.length} entries`);
+    if (leaderboard.length > 0) {
+      console.log('First entry:', leaderboard[0]);
+    }
+
+    // If empty, try to initialize with dummy data
+    if (leaderboard.length === 0) {
+      console.log('Leaderboard empty, initializing with dummy data...');
+      await initializeLeaderboards();
+      // Retry fetching
+      if (type === 'daily') {
+        const today = date || new Date().toISOString().split('T')[0];
+        leaderboard = await getDailyLeaderboard(today, limit);
+      } else if (type === 'weekly') {
+        leaderboard = await getWeeklyLeaderboard(limit);
+      } else {
+        leaderboard = await getGlobalLeaderboard(limit);
+      }
+      console.log(`After initialization: ${leaderboard.length} entries`);
     }
 
     res.json({ leaderboard, type });
@@ -230,6 +306,89 @@ router.get('/api/stats', async (_req, res): Promise<void> => {
   }
 });
 
+// Initialize dummy data endpoint (can be called manually if needed)
+router.post('/api/initialize-leaderboards', async (_req, res): Promise<void> => {
+  try {
+    await initializeLeaderboards();
+    res.json({ success: true, message: 'Leaderboards initialized with dummy data' });
+  } catch (error) {
+    console.error('Error initializing leaderboards:', error);
+    res.status(500).json({ error: 'Failed to initialize leaderboards' });
+  }
+});
+
+// Get current user endpoint
+router.get('/api/current-user', async (_req, res): Promise<void> => {
+  try {
+    // Try to get username from context
+    const username = context.username ||
+                    context.userId ||
+                    (context as any).author ||
+                    (context as any).user ||
+                    null;
+
+    res.json({
+      username,
+      userId: context.userId,
+      postId: context.postId,
+      subreddit: context.subredditName,
+      contextKeys: Object.keys(context)
+    });
+  } catch (error) {
+    console.error('Error getting current user:', error);
+    res.status(500).json({ error: 'Failed to get current user' });
+  }
+});
+
+// Check username availability
+router.post('/api/check-username', async (req, res): Promise<void> => {
+  try {
+    const { username } = req.body;
+
+    if (!username || typeof username !== 'string') {
+      res.status(400).json({ error: 'Username is required' });
+      return;
+    }
+
+    // Validate username format
+    if (username.length < 3 || username.length > 20 || !/^[a-zA-Z0-9_]+$/.test(username)) {
+      res.status(400).json({
+        error: 'Invalid username format',
+        available: false
+      });
+      return;
+    }
+
+    // Check if username is already taken
+    const customUsernamesKey = 'hexomind:custom_usernames';
+    const existingUser = await redis.hGet(customUsernamesKey, username.toLowerCase());
+
+    if (existingUser) {
+      res.json({
+        available: false,
+        message: 'Username already taken'
+      });
+    } else {
+      // Reserve the username temporarily (expires in 5 minutes)
+      await redis.hSet(customUsernamesKey, {
+        [username.toLowerCase()]: JSON.stringify({
+          reserved: true,
+          timestamp: Date.now(),
+          userId: context.userId || 'anonymous'
+        })
+      });
+
+      res.json({
+        available: true,
+        message: 'Username is available'
+      });
+    }
+  } catch (error) {
+    console.error('Error checking username:', error);
+    res.status(500).json({ error: 'Failed to check username availability' });
+  }
+});
+
 // Use router middleware
 app.use(router);
 
@@ -238,4 +397,11 @@ const port = process.env.WEBBIT_PORT || 3000;
 
 const server = createServer(app);
 server.on('error', (err) => console.error(`server error; ${err.stack}`));
-server.listen(port, () => console.log(`http://localhost:${port}`));
+server.listen(port, () => {
+  console.log(`http://localhost:${port}`);
+
+  // Initialize leaderboards with dummy data on startup
+  initializeLeaderboards().catch(err =>
+    console.error('Failed to initialize leaderboards on startup:', err)
+  );
+});

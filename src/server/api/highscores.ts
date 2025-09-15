@@ -118,17 +118,91 @@ export async function updateDailyLeaderboard(username: string, score: number): P
 }
 
 /**
+ * Get current week number and year
+ */
+function getWeekInfo(): { week: number; year: number } {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 1);
+  const diff = now.getTime() - start.getTime();
+  const oneWeek = 1000 * 60 * 60 * 24 * 7;
+  const week = Math.floor(diff / oneWeek) + 1;
+  return { week, year: now.getFullYear() };
+}
+
+/**
+ * Get weekly leaderboard
+ */
+export async function getWeeklyLeaderboard(limit: number = 10): Promise<LeaderboardEntry[]> {
+  try {
+    const { week, year } = getWeekInfo();
+    const key = `leaderboard:weekly:${year}:${week}`;
+    const scores = await redis.zrange(key, 0, limit - 1, {
+      reverse: true,
+      withScores: true
+    });
+
+    if (!scores || scores.length === 0) {
+      return [];
+    }
+
+    const entries: LeaderboardEntry[] = [];
+    let rank = 1;
+
+    for (let i = 0; i < scores.length; i += 2) {
+      const username = scores[i] as string;
+      const score = parseInt(scores[i + 1] as string);
+
+      entries.push({
+        rank,
+        username,
+        score,
+        timestamp: Date.now(),
+      });
+
+      rank++;
+    }
+
+    return entries;
+  } catch (error) {
+    console.error('Error getting weekly leaderboard:', error);
+    return [];
+  }
+}
+
+/**
+ * Update weekly leaderboard
+ */
+export async function updateWeeklyLeaderboard(username: string, score: number): Promise<void> {
+  try {
+    const { week, year } = getWeekInfo();
+    const key = `leaderboard:weekly:${year}:${week}`;
+
+    await redis.zadd(key, { score, member: username });
+
+    // Set expiry for weekly leaderboard (30 days)
+    await redis.expire(key, 30 * 24 * 60 * 60);
+  } catch (error) {
+    console.error('Error updating weekly leaderboard:', error);
+  }
+}
+
+/**
  * Get global leaderboard
  */
 export async function getGlobalLeaderboard(limit: number = 10): Promise<LeaderboardEntry[]> {
   try {
+    console.log(`Getting global leaderboard, limit: ${limit}`);
+
     // Get top scores from sorted set
     const scores = await redis.zrange('leaderboard:global', 0, limit - 1, {
       reverse: true,
       withScores: true
     });
 
+    console.log(`Redis zrange result:`, scores);
+
     if (!scores || scores.length === 0) {
+      console.log('No scores found in global leaderboard');
       return [];
     }
 
