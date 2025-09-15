@@ -265,6 +265,14 @@ export class BoardRenderer {
     const isOccupied = cell?.isOccupied || false;
     const theme = this.themeProvider.getTheme();
 
+    // ALWAYS reset scale and size to prevent growing hexagons
+    const radius = this.hexSize - this.hexSpacing;
+    const dim = radius * 2;
+    base.setScale(1);
+    base.setDisplaySize(dim, dim);
+    fill.setScale(1);
+    fill.setDisplaySize(dim - 2, dim - 2);
+
     // Base tint (grid)
     const isAlt = (coords.q + coords.r) % 2 === 0;
     let bgColor = isAlt ? theme.cellEmpty : theme.cellEmptyAlt;
@@ -557,7 +565,24 @@ export class BoardRenderer {
           ? this.themeProvider.getPieceColorByIndex(colorIndex)
           : this.themeProvider.getTheme().glowSuccess;
 
-        // Highlight complete line cells with piece color
+        // Track which cells are part of the line to clear
+        const lineCells = new Set<string>();
+        potentialLines.forEach(line => {
+          line.cells.forEach(coord => {
+            lineCells.add(hexToKey(coord));
+          });
+        });
+
+        // First, hide the existing fill images for cells that will be in the line
+        lineCells.forEach(key => {
+          const fillImage = this.cellFillImages.get(key);
+          if (fillImage && fillImage.visible) {
+            // Temporarily hide the original piece
+            fillImage.setVisible(false);
+          }
+        });
+
+        // Now draw the line preview with the dragged piece color AND LED outline
         potentialLines.forEach(line => {
           line.cells.forEach(coord => {
             const position = this.hexToPixelInternal(coord);
@@ -567,22 +592,26 @@ export class BoardRenderer {
             // Create a separate graphics object for each hexagon
             const hexGraphics = this.scene.add.graphics();
 
-            // Fill the hexagon with the piece color (semi-transparent)
-            hexGraphics.fillStyle(linePreviewColor, 0.6);
-            hexGraphics.lineStyle(2, linePreviewColor, 0.8);
+            // Fill the hexagon completely with the piece color (full opacity)
+            hexGraphics.fillStyle(linePreviewColor, 1.0); // Full opacity
 
             const points = this.hexRenderer.getHexPoints(this.hexSize - this.hexSpacing);
 
             hexGraphics.beginPath();
             hexGraphics.moveTo(px + points[0].x, py + points[0].y);
-
             for (let i = 1; i < points.length; i++) {
               hexGraphics.lineTo(px + points[i].x, py + points[i].y);
             }
-
             hexGraphics.closePath();
             hexGraphics.fillPath(); // Fill with piece color
-            hexGraphics.strokePath(); // Add outline for definition
+
+            // Add LED outline effect
+            hexGraphics.lineStyle(3, linePreviewColor, 1.0);
+            hexGraphics.strokePath();
+            hexGraphics.lineStyle(6, linePreviewColor, 0.5);
+            hexGraphics.strokePath();
+            hexGraphics.lineStyle(10, linePreviewColor, 0.2);
+            hexGraphics.strokePath();
 
             // Add to container and array
             this.linePreviewContainer.add(hexGraphics);
@@ -590,11 +619,11 @@ export class BoardRenderer {
           });
         });
 
-        // Add subtle animated pulse effect to the container
+        // Add smooth blinking LED effect
         this.scene.tweens.add({
           targets: this.linePreviewContainer,
-          alpha: { from: 1, to: 0.7 },
-          duration: 800,
+          alpha: { from: 0.7, to: 1.0 },
+          duration: 600,
           yoyo: true,
           repeat: -1,
           ease: 'Sine.easeInOut'
@@ -618,6 +647,20 @@ export class BoardRenderer {
     // Kill any existing tweens
     this.scene.tweens.killTweensOf(this.linePreviewContainer);
 
+    // Reset container alpha
+    this.linePreviewContainer.setAlpha(1);
+
+    // Restore visibility of all fill images that should be visible
+    this.cellFillImages.forEach((img, key) => {
+      const [q, r] = key.split(',').map(Number);
+      if (!isNaN(q) && !isNaN(r)) {
+        const coord = { q, r };
+        if (this.gridModel.isCellOccupied(coord) && !img.visible) {
+          img.setVisible(true);
+        }
+      }
+    });
+
     // Destroy all graphics objects
     this.linePreviewGraphics.forEach(g => g.destroy());
     this.linePreviewGraphics = [];
@@ -640,117 +683,81 @@ export class BoardRenderer {
   }
 
   /**
-   * Animate line clearing with synchronized steps across all lines.
-   * Step 0 cells from all lines clear together, then step 1 together, etc.
+   * Animate line clearing with wave effect - cells disappear one by one
    */
   animateLineClear(lines: { cells: HexCoordinates[] }[]): Promise<void> {
     return new Promise(resolve => {
       if (!lines || lines.length === 0) { resolve(); return; }
 
-      // Map each unique cell to the minimum index it appears at across lines
-      const indexByKey = new Map<string, number>();
+      // Collect all unique cells with their line index
       const cellByKey = new Map<string, HexCoordinates>();
-      let maxIndex = 0;
+      const cellsToAnimate: { coord: HexCoordinates, key: string, lineIndex: number, cellIndex: number }[] = [];
 
-      lines.forEach(line => {
-        line.cells.forEach((c, idx) => {
+      lines.forEach((line, lineIdx) => {
+        line.cells.forEach((c, cellIdx) => {
           const key = hexToKey(c);
-          const prev = indexByKey.get(key);
-          if (prev === undefined || idx < prev) {
-            indexByKey.set(key, idx);
-            cellByKey.set(key, c);
-          }
-          if (idx > maxIndex) maxIndex = idx;
+          cellByKey.set(key, c);
+          cellsToAnimate.push({ coord: c, key, lineIndex: lineIdx, cellIndex: cellIdx });
         });
       });
 
-      if (indexByKey.size === 0) { resolve(); return; }
+      if (cellsToAnimate.length === 0) { resolve(); return; }
 
-      // Build layers: each step index -> list of image targets
-      const layers: Phaser.GameObjects.Image[][] = [];
-      for (let i = 0; i <= maxIndex; i++) layers[i] = [];
+      // Randomly choose wave direction
+      const waveFromLeft = Math.random() < 0.5;
 
-      indexByKey.forEach((idx, key) => {
-        const img = this.cellFillImages.get(key);
-        if (img) {
-          this.scene.tweens.killTweensOf(img);
-          layers[idx].push(img);
+      // Sort cells based on random direction
+      cellsToAnimate.sort((a, b) => {
+        if (waveFromLeft) {
+          // Sort by cell index (left to right in line)
+          return a.cellIndex - b.cellIndex;
+        } else {
+          // Sort by reverse cell index (right to left)
+          return b.cellIndex - a.cellIndex;
         }
       });
 
-      // Remove empty tail layers
-      while (layers.length > 0 && layers[layers.length - 1].length === 0) {
-        layers.pop();
-      }
-
-      if (layers.length === 0) { resolve(); return; }
-
-      // Wave effect - each cell disappears one by one
-      const perCellDelay = 30; // 0.03 second delay between each cell (faster wave)
-      const animDuration = 100; // Faster shrink for each cell
+      // Wave effect parameters
+      const perCellDelay = 20; // Very short delay between cells (20ms)
+      const animDuration = 150; // Smooth scale to zero
 
       let completed = 0;
-      const total = indexByKey.size;
-
-      if (total === 0) {
-        resolve();
-        return;
-      }
-
-      const finalize = () => {
-        // Update model for all affected cells
-        cellByKey.forEach(c => this.gridModel.setCellOccupied(c, false));
-
-        // Reset visuals for reuse with consistent spacing
-        const radius = this.hexSize - this.hexSpacing;
-        const dim = radius * 2;
-        cellByKey.forEach((c, key) => {
-          const img = this.cellFillImages.get(key);
-          if (img) {
-            img.setDisplaySize(dim - 2, dim - 2);
-            img.setAlpha(1);
-            img.setVisible(false);
-          }
-        });
-
-        this.updateBoard();
-        resolve();
-      };
-
-      // Create ordered array of cells to animate sequentially
-      const cellsToAnimate: { img: Phaser.GameObjects.Image, key: string }[] = [];
-      indexByKey.forEach((cellIndex, key) => {
-        const img = this.cellFillImages.get(key);
-        if (img) {
-          this.scene.tweens.killTweensOf(img);
-          cellsToAnimate.push({ img, key });
-        }
-      });
-
-      // Sort by their index to ensure proper wave order
-      cellsToAnimate.sort((a, b) => {
-        const indexA = indexByKey.get(a.key) || 0;
-        const indexB = indexByKey.get(b.key) || 0;
-        return indexA - indexB;
-      });
+      const total = cellsToAnimate.length;
 
       // Animate each cell with sequential delay
       cellsToAnimate.forEach((cell, index) => {
-        this.scene.tweens.add({
-          targets: cell.img,
-          scaleX: 0,
-          scaleY: 0,
-          alpha: 0,
-          duration: animDuration,
-          delay: index * perCellDelay, // Sequential delay for each cell
-          ease: 'Power2.easeIn',
-          onComplete: () => {
-            completed++;
-            if (completed === total) {
-              finalize();
+        const img = this.cellFillImages.get(cell.key);
+        if (img) {
+          this.scene.tweens.add({
+            targets: img,
+            scaleX: 0,
+            scaleY: 0,
+            alpha: 0,
+            duration: animDuration,
+            delay: index * perCellDelay, // Sequential delay for wave effect
+            ease: 'Power2.easeIn',
+            onComplete: () => {
+              completed++;
+
+              // Update model
+              this.gridModel.setCellOccupied(cell.coord, false);
+
+              // Reset visual for reuse - reset display size too!
+              const radius = this.hexSize - this.hexSpacing;
+              const dim = radius * 2;
+              img.setVisible(false);
+              img.setScale(1);
+              img.setDisplaySize(dim - 2, dim - 2);
+              img.setAlpha(1);
+
+              // When all animations complete
+              if (completed === total) {
+                this.updateBoard();
+                resolve();
+              }
             }
-          }
-        });
+          });
+        }
       });
     });
   }

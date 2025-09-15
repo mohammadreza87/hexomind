@@ -1,7 +1,8 @@
 import * as Phaser from 'phaser';
+import { DS } from '../../config/DesignSystem';
 
 /**
- * ToastUI - Lightweight in-scene toast notification.
+ * ToastUI - Modern toast notification with Design System.
  * Usage: await toast.show('No more space');
  */
 export class ToastUI {
@@ -17,8 +18,8 @@ export class ToastUI {
    * after the toast fully hides.
    */
   show(message: string, opts?: { duration?: number; hold?: number }): Promise<void> {
-    const duration = opts?.duration ?? 220; // fade in/out
-    const hold = opts?.hold ?? 900; // visible time
+    const duration = opts?.duration ?? DS.ANIMATION.normal; // fade in/out
+    const hold = opts?.hold ?? DS.ANIMATION.slower; // visible time
 
     // Clean any existing toast first
     if (this.container) {
@@ -28,24 +29,27 @@ export class ToastUI {
 
     const { width } = this.scene.cameras.main;
 
-    const container = this.scene.add.container(width / 2, 80);
-    container.setDepth(2000);
+    const container = this.scene.add.container(width / 2, DS.SPACING.xxxl + DS.SPACING.xl);
+    container.setDepth(DS.LAYERS.toast);
 
-    const paddingX = 18;
-    const paddingY = 10;
+    const paddingX = DS.SPACING.lg;
+    const paddingY = DS.SPACING.md;
 
-    const text = this.scene.add.text(0, 0, message, {
-      fontSize: '18px',
-      fontFamily: 'system-ui, -apple-system, sans-serif',
-      color: '#FFFFFF',
-      align: 'center'
-    }).setOrigin(0.5);
+    const text = this.scene.add.text(0, 0, message,
+      DS.getTextStyle('body', {
+        color: DS.COLORS.solid.textPrimary
+      })
+    ).setOrigin(0.5);
 
-    const bgWidth = Math.max(160, text.width + paddingX * 2);
-    const bgHeight = Math.max(40, text.height + paddingY * 2);
+    const bgWidth = Math.max(DS.SPACING.xxxl * 3, text.width + paddingX * 2);
+    const bgHeight = Math.max(DS.SPACING.xxl, text.height + paddingY * 2);
 
-    const bg = this.scene.add.rectangle(0, 0, bgWidth, bgHeight, 0x11111a, 0.92)
-      .setStrokeStyle(2, 0xff6b6b, 0.9)
+    const bg = this.scene.add.rectangle(
+      0, 0, bgWidth, bgHeight,
+      DS.hexToNumber(DS.COLORS.solid.bgElevated),
+      0.95
+    )
+      .setStrokeStyle(1, DS.hexToNumber(DS.COLORS.glass.border))
       .setOrigin(0.5);
 
     container.add([bg, text]);

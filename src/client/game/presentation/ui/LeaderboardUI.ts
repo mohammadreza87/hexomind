@@ -1,8 +1,9 @@
 /**
- * Leaderboard UI component for displaying high scores
+ * Leaderboard UI component - Modern Design System Implementation
  */
 import * as Phaser from 'phaser';
-import { highScoreService, LeaderboardEntry } from '../../../services/HighScoreService';
+import { highScoreService } from '../../../services/HighScoreService';
+import { DS } from '../../config/DesignSystem';
 
 export class LeaderboardUI extends Phaser.GameObjects.Container {
   private background: Phaser.GameObjects.Rectangle;
@@ -19,42 +20,43 @@ export class LeaderboardUI extends Phaser.GameObjects.Container {
 
     const { width, height } = scene.cameras.main;
 
-    // Semi-transparent background overlay
+    // Semi-transparent background overlay with modern blur
     this.background = scene.add.rectangle(
       width / 2,
       height / 2,
       width,
       height,
-      0x000000,
-      0.8
+      DS.hexToNumber(DS.COLORS.solid.bgPrimary),
+      0.85
     );
     this.background.setInteractive();
     this.add(this.background);
 
-    // Leaderboard panel
-    const panelWidth = Math.min(400, width * 0.9);
-    const panelHeight = Math.min(500, height * 0.8);
+    // Leaderboard panel with glassmorphism
+    const panelWidth = Math.min(440, width * 0.9);
+    const panelHeight = Math.min(560, height * 0.85);
     const panel = scene.add.rectangle(
       width / 2,
       height / 2,
       panelWidth,
       panelHeight,
-      0x1a1a2e,
-      1
+      DS.hexToNumber(DS.COLORS.solid.bgElevated),
+      0.95
     );
-    panel.setStrokeStyle(2, 0x16213e);
+    panel.setStrokeStyle(1, DS.hexToNumber(DS.COLORS.glass.border));
     this.add(panel);
 
-    // Title
+    // Title with Inter Black font
     this.titleText = scene.add.text(
       width / 2,
-      height / 2 - panelHeight / 2 + 30,
+      height / 2 - panelHeight / 2 + DS.SPACING.xl,
       'LEADERBOARD',
       {
-        fontSize: '28px',
-        fontFamily: '"Lilita One", "Comic Sans MS", cursive',
-        fontStyle: 'bold',
-        color: '#FFD700'
+        fontSize: DS.TYPOGRAPHY.fontSize['2xl'],
+        fontFamily: DS.TYPOGRAPHY.fontFamily.displayBlack,
+        fontStyle: '900 normal', // Inter Black
+        color: DS.COLORS.solid.warning,
+        align: 'center'
       }
     ).setOrigin(0.5);
     this.add(this.titleText);
@@ -201,11 +203,9 @@ export class LeaderboardUI extends Phaser.GameObjects.Container {
           0,
           0,
           'No scores yet. Be the first!',
-          {
-            fontSize: '18px',
-            fontFamily: 'monospace',
-            color: '#666666'
-          }
+          DS.getTextStyle('body', {
+            color: DS.COLORS.solid.textMuted
+          })
         ).setOrigin(0.5);
         this.entriesContainer.add(noDataText);
         return;
@@ -312,14 +312,14 @@ export class LeaderboardUI extends Phaser.GameObjects.Container {
   }
 
   /**
-   * Get color based on rank
+   * Get color based on rank with modern palette
    */
   private getRankColor(rank: number): string {
     switch (rank) {
-      case 1: return '#FFD700'; // Gold
-      case 2: return '#C0C0C0'; // Silver
-      case 3: return '#CD7F32'; // Bronze
-      default: return '#FFFFFF';
+      case 1: return '#f5af19'; // Gold gradient start
+      case 2: return '#b8b8b8'; // Silver
+      case 3: return '#cd7f32'; // Bronze
+      default: return DS.COLORS.solid.textPrimary;
     }
   }
 

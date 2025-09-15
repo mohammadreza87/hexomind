@@ -1,8 +1,9 @@
 /**
- * Game Over UI component
+ * Game Over UI component - Modern Design System Implementation
  */
 import * as Phaser from 'phaser';
 import { highScoreService } from '../../../services/HighScoreService';
+import { DS } from '../../config/DesignSystem';
 
 export class GameOverUI extends Phaser.GameObjects.Container {
   private background: Phaser.GameObjects.Rectangle;
@@ -24,106 +25,106 @@ export class GameOverUI extends Phaser.GameObjects.Container {
     this.setDepth(1000);
     this.setVisible(false);
 
-    // Semi-transparent background overlay
+    // Semi-transparent background overlay with blur effect
     this.background = scene.add.rectangle(
       width / 2,
       height / 2,
       width,
       height,
-      0x000000,
-      0.8
+      DS.hexToNumber(DS.COLORS.solid.bgPrimary),
+      0.85
     );
     this.background.setInteractive();
     this.add(this.background);
 
-    // Main panel
-    const panelWidth = Math.min(350, width * 0.9);
-    const panelHeight = Math.min(400, height * 0.7);
+    // Main panel with modern glassmorphism effect
+    const panelWidth = Math.min(400, width * 0.9);
+    const panelHeight = Math.min(480, height * 0.75);
     this.panel = scene.add.rectangle(
       width / 2,
       height / 2,
       panelWidth,
       panelHeight,
-      0x1a1a2e,
-      1
+      DS.hexToNumber(DS.COLORS.solid.bgElevated),
+      0.95
     );
-    this.panel.setStrokeStyle(3, 0xff4444);
+    this.panel.setStrokeStyle(1, DS.hexToNumber(DS.COLORS.glass.border));
     this.add(this.panel);
 
-    // Game Over title
+    // Game Over title with Inter Black font
     this.gameOverText = scene.add.text(
       width / 2,
-      height / 2 - panelHeight / 2 + 40,
+      height / 2 - panelHeight / 2 + DS.SPACING.xxl,
       'GAME OVER',
       {
-        fontSize: '36px',
-        fontFamily: '"Lilita One", "Comic Sans MS", cursive',
-        fontStyle: 'bold',
-        color: '#FF4444'
+        fontSize: DS.TYPOGRAPHY.fontSize['3xl'],
+        fontFamily: DS.TYPOGRAPHY.fontFamily.displayBlack,
+        fontStyle: '900 normal', // Inter Black
+        color: DS.COLORS.solid.danger,
+        align: 'center'
       }
     ).setOrigin(0.5);
     this.add(this.gameOverText);
 
-    // Score display
+    // Score display with bold Inter font
     this.scoreText = scene.add.text(
       width / 2,
-      height / 2 - panelHeight / 2 + 100,
+      height / 2 - panelHeight / 2 + DS.SPACING.xxl + DS.SPACING.xxxl,
       'Score: 0',
       {
-        fontSize: '28px',
-        fontFamily: '"Lilita One", "Comic Sans MS", cursive',
-        fontStyle: 'bold',
-        color: '#FFFFFF'
+        fontSize: DS.TYPOGRAPHY.fontSize['2xl'],
+        fontFamily: DS.TYPOGRAPHY.fontFamily.display,
+        fontStyle: '700 normal', // Bold
+        color: DS.COLORS.solid.textPrimary,
+        align: 'center'
       }
     ).setOrigin(0.5);
     this.add(this.scoreText);
 
-    // Best score display
+    // Best score display with consistent spacing
     this.bestScoreText = scene.add.text(
       width / 2,
-      height / 2 - panelHeight / 2 + 140,
+      height / 2 - panelHeight / 2 + DS.SPACING.xxl + DS.SPACING.xxxl + DS.SPACING.xl,
       'Best: 0',
-      {
-        fontSize: '22px',
-        fontFamily: '"Lilita One", "Comic Sans MS", cursive',
-        color: '#FFD700'
-      }
+      DS.getTextStyle('body', {
+        color: DS.COLORS.solid.warning,
+        weight: 'medium'
+      })
     ).setOrigin(0.5);
     this.add(this.bestScoreText);
 
-    // Daily rank display
+    // Daily rank display with modern font
     this.dailyRankText = scene.add.text(
       width / 2,
-      height / 2 - panelHeight / 2 + 180,
+      height / 2 - panelHeight / 2 + DS.SPACING.xxl + DS.SPACING.xxxl + DS.SPACING.xxxl,
       'Daily Rank: Loading...',
-      {
-        fontSize: '18px',
-        fontFamily: 'monospace',
-        color: '#4ECDC4'
-      }
+      DS.getTextStyle('caption', {
+        color: DS.COLORS.solid.info,
+        weight: 'regular'
+      })
     ).setOrigin(0.5);
     this.add(this.dailyRankText);
 
-    // Leaderboard button
+    // Leaderboard button with modern design
     this.leaderboardButton = this.createButton(
       scene,
       width / 2,
-      height / 2 + 30,
+      height / 2 + DS.SPACING.xl,
       'Leaderboard',
-      0x4ECDC4,
+      DS.hexToNumber(DS.COLORS.solid.info),
       () => {
         this.emit('showLeaderboard');
       }
     );
     this.add(this.leaderboardButton);
 
-    // Try Again button
+    // Try Again button with primary color
     this.tryAgainButton = this.createButton(
       scene,
       width / 2,
-      height / 2 + 90,
+      height / 2 + DS.SPACING.xl + DS.SPACING.xxxl,
       'Try Again',
-      0x44FF44,
+      DS.hexToNumber(DS.COLORS.solid.success),
       () => {
         this.emit('tryAgain');
         this.hide();
@@ -139,7 +140,7 @@ export class GameOverUI extends Phaser.GameObjects.Container {
   }
 
   /**
-   * Create a button
+   * Create a modern button with consistent design
    */
   private createButton(
     scene: Phaser.Scene,
@@ -151,26 +152,31 @@ export class GameOverUI extends Phaser.GameObjects.Container {
   ): Phaser.GameObjects.Container {
     const button = scene.add.container(x, y);
 
-    const bg = scene.add.rectangle(0, 0, 180, 45, color, 1);
-    bg.setStrokeStyle(2, 0xffffff, 0.5);
+    const buttonWidth = 200;
+    const buttonHeight = DS.SPACING.xxl;
+
+    const bg = scene.add.rectangle(0, 0, buttonWidth, buttonHeight, color, 0.9);
+    bg.setStrokeStyle(1, DS.hexToNumber(DS.COLORS.glass.border));
     bg.setInteractive();
 
-    const label = scene.add.text(0, 0, text, {
-      fontSize: '20px',
-      fontFamily: '"Lilita One", "Comic Sans MS", cursive',
-      fontStyle: 'bold',
-      color: '#FFFFFF'
-    }).setOrigin(0.5);
+    const label = scene.add.text(0, 0, text,
+      DS.getTextStyle('button', {
+        color: DS.COLORS.solid.textPrimary,
+        weight: 'medium'
+      })
+    ).setOrigin(0.5);
 
     button.add([bg, label]);
 
     bg.on('pointerdown', onClick);
     bg.on('pointerover', () => {
       bg.setScale(1.05);
+      bg.setAlpha(1);
       scene.input.setDefaultCursor('pointer');
     });
     bg.on('pointerout', () => {
       bg.setScale(1);
+      bg.setAlpha(0.9);
       scene.input.setDefaultCursor('default');
     });
 

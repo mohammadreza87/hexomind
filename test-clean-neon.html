@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HEXOMIND Clean Neon Title</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@900&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: #0a0a0f;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+        }
+
+        .title-container {
+            text-align: center;
+        }
+
+        .gradient-title {
+            font-family: 'Inter', sans-serif;
+            font-weight: 900;
+            font-size: 72px;
+            letter-spacing: -2px;
+            text-transform: uppercase;
+            /* No animations, no glow, just clean gradient */
+        }
+
+        /* Different neon gradients - same hue, different brightness */
+        .neon-cyan {
+            background: linear-gradient(180deg, #004c5c 0%, #00b4cc 50%, #66ffff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .neon-purple {
+            background: linear-gradient(180deg, #2d0047 0%, #8b00ff 50%, #d9b3ff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .neon-pink {
+            background: linear-gradient(180deg, #660033 0%, #ff006e 50%, #ff99c2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .neon-blue {
+            background: linear-gradient(180deg, #001a4d 0%, #0066ff 50%, #99c2ff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .neon-green {
+            background: linear-gradient(180deg, #003300 0%, #00cc00 50%, #66ff66 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .neon-orange {
+            background: linear-gradient(180deg, #663300 0%, #ff8800 50%, #ffcc66 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* Smooth transition between colors */
+        .gradient-title {
+            transition: all 1s ease-in-out;
+        }
+
+        .game-info {
+            margin-top: 40px;
+            color: #ffffff;
+        }
+
+        .score {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .best-score {
+            font-size: 20px;
+            font-weight: 500;
+            color: rgba(255, 255, 255, 0.8);
+        }
+    </style>
+</head>
+<body>
+    <div class="title-container">
+        <!-- Clean title without glow or animations -->
+        <h1 class="gradient-title neon-cyan" id="title">HEXOMIND</h1>
+
+        <div class="game-info">
+            <div class="score">Score: 12,450</div>
+            <div class="best-score">Best: 48,200</div>
+        </div>
+    </div>
+
+    <script>
+        const title = document.getElementById('title');
+        const colors = ['neon-cyan', 'neon-purple', 'neon-pink', 'neon-blue', 'neon-green', 'neon-orange'];
+        let currentIndex = 0;
+
+        // Change color every 3 seconds - smooth transition only
+        function changeColor() {
+            // Remove all color classes
+            colors.forEach(c => title.classList.remove(c));
+
+            // Pick next color in sequence (or random)
+            currentIndex = Math.floor(Math.random() * colors.length);
+            title.classList.add(colors[currentIndex]);
+        }
+
+        // Auto change color every 3 seconds
+        setInterval(changeColor, 3000);
+    </script>
+</body>
+</html>

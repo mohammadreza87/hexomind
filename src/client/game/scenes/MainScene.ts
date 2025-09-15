@@ -15,6 +15,8 @@ import { LeaderboardUI } from '../presentation/ui/LeaderboardUI';
 import { GameOverUI } from '../presentation/ui/GameOverUI';
 import { ToastUI } from '../presentation/ui/ToastUI';
 import { SharpText } from '../utils/SharpText';
+import { DS } from '../config/DesignSystem';
+import { createGradientText } from '../presentation/ui/GradientText';
 // Asset URLs (bundled by Vite) - commented out for now since SVG not available
 // import hexSvgUrl from '../../assets/images/hex.svg';
 
@@ -166,44 +168,67 @@ export class MainScene extends Phaser.Scene {
     const theme = this.themeProvider.getTheme();
     const { width, height } = this.cameras.main;
 
-    // Title at top - with high resolution for sharpness
-    const titleText = this.add.text(width / 2, 30, 'HEXOMIND', {
-      fontSize: '36px',
-      fontFamily: '"Lilita One", "Comic Sans MS", cursive',
-      fontStyle: 'bold',
-      color: this.themeProvider.toCSS(theme.textPrimary)
-    });
-    titleText.setOrigin(0.5, 0.5).setDepth(100);
-    titleText.setResolution(window.devicePixelRatio || 1);
+    // Title with neon gradient effect and auto color cycling - no animations
+    const titleText = createGradientText(
+      this,
+      width / 2,
+      DS.SPACING.xl + DS.SPACING.sm,
+      'HEXOMIND',
+      '48px',
+      undefined, // Let it pick a random neon gradient
+      true // Enable auto color cycling
+    );
+    titleText.setDepth(DS.LAYERS.ui);
+    // No breathing animation, no glow - just static with color changes
 
-    // Score display - with high resolution
-    this.scoreText = this.add.text(width / 2, height * 0.12, 'Score: 0', {
-      fontSize: '24px',
-      fontFamily: '"Lilita One", "Comic Sans MS", cursive',
-      fontStyle: 'bold',
-      color: this.themeProvider.toCSS(theme.textPrimary)
-    });
-    this.scoreText.setOrigin(0.5, 0.5).setDepth(100);
+    // Score display with bold Inter font
+    this.scoreText = this.add.text(
+      width / 2,
+      height * 0.12,
+      'Score: 0',
+      {
+        fontSize: DS.TYPOGRAPHY.fontSize['2xl'],
+        fontFamily: DS.TYPOGRAPHY.fontFamily.display,
+        fontStyle: '700 normal', // Bold weight
+        color: DS.COLORS.solid.textPrimary,
+        align: 'center'
+      }
+    );
+    this.scoreText.setOrigin(0.5, 0.5).setDepth(DS.LAYERS.ui);
     this.scoreText.setResolution(window.devicePixelRatio || 1);
 
-    // High score display - with high resolution
-    this.highScoreText = this.add.text(width / 2, height * 0.16, 'Best: 0', {
-      fontSize: '18px',
-      fontFamily: '"Lilita One", "Comic Sans MS", cursive',
-      color: this.themeProvider.toCSS(theme.textSecondary)
-    });
-    this.highScoreText.setOrigin(0.5, 0.5).setDepth(100);
+    // High score display with medium Inter font
+    this.highScoreText = this.add.text(
+      width / 2,
+      height * 0.16,
+      'Best: 0',
+      {
+        fontSize: DS.TYPOGRAPHY.fontSize.lg,
+        fontFamily: DS.TYPOGRAPHY.fontFamily.display,
+        fontStyle: '500 normal', // Medium weight
+        color: DS.COLORS.solid.textSecondary,
+        align: 'center'
+      }
+    );
+    this.highScoreText.setOrigin(0.5, 0.5).setDepth(DS.LAYERS.ui);
     this.highScoreText.setResolution(window.devicePixelRatio || 1);
 
-    // Leaderboard button
-    this.leaderboardButton = SharpText.create(this, width - 20, 20, '🏆 Leaderboard', {
-      fontSize: '16px',
-      fontFamily: 'monospace',
-      color: '#FFD700',
-      backgroundColor: '#1a1a2e',
-      padding: { x: 10, y: 5 }
-    });
-    this.leaderboardButton.setOrigin(1, 0).setDepth(100).setInteractive();
+    // Leaderboard button with proper spacing
+    this.leaderboardButton = SharpText.create(
+      this,
+      width - DS.SPACING.lg,
+      DS.SPACING.lg,
+      '🏆 Leaderboard',
+      {
+        fontSize: DS.TYPOGRAPHY.fontSize.base,
+        fontFamily: DS.TYPOGRAPHY.fontFamily.body,
+        fontStyle: 'normal',
+        color: DS.COLORS.solid.warning,
+        backgroundColor: DS.COLORS.glass.background,
+        padding: { x: DS.SPACING.md, y: DS.SPACING.sm }
+      }
+    );
+    this.leaderboardButton.setOrigin(1, 0).setDepth(DS.LAYERS.ui).setInteractive();
 
     this.leaderboardButton.on('pointerdown', () => {
       if (!this.leaderboardUI.getIsVisible()) {
@@ -221,10 +246,10 @@ export class MainScene extends Phaser.Scene {
       this.input.setDefaultCursor('default');
     });
 
-    // Create leaderboard UI (initially hidden)
+    // Create leaderboard UI with modern design (initially hidden)
     this.leaderboardUI = new LeaderboardUI(this);
 
-    // Create game over UI (initially hidden)
+    // Create game over UI with modern design (initially hidden)
     this.gameOverUI = new GameOverUI(this);
     this.gameOverUI.on('showLeaderboard', () => {
       this.leaderboardUI.show();

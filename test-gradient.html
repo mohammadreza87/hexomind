@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HEXOMIND Gradient Title Test</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background: #0a0a0f;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .title-container {
+            text-align: center;
+        }
+
+        .gradient-title {
+            font-family: 'Inter', sans-serif;
+            font-weight: 900; /* Inter Black */
+            font-size: 72px;
+            letter-spacing: -2px;
+            background: linear-gradient(180deg, #00f5ff 0%, #8b00ff 50%, #ff006e 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-fill-color: transparent;
+            animation: pulse 3s ease-in-out infinite;
+        }
+
+        .subtitle {
+            font-family: 'Inter', sans-serif;
+            font-weight: 700;
+            font-size: 32px;
+            color: #ffffff;
+            margin-top: 20px;
+        }
+
+        .score {
+            font-family: 'Inter', sans-serif;
+            font-weight: 500;
+            font-size: 20px;
+            color: rgba(255, 255, 255, 0.8);
+            margin-top: 10px;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+        }
+
+        /* Different gradient variations */
+        .gradient-alt1 {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .gradient-alt2 {
+            background: linear-gradient(90deg, #f5af19 0%, #f12711 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+    </style>
+</head>
+<body>
+    <div class="title-container">
+        <h1 class="gradient-title">HEXOMIND</h1>
+        <div class="subtitle">Score: 12,450</div>
+        <div class="score">Best: 48,200</div>
+
+        <div style="margin-top: 60px;">
+            <h2 class="gradient-title gradient-alt1" style="font-size: 48px;">GAME OVER</h2>
+        </div>
+
+        <div style="margin-top: 40px;">
+            <h2 class="gradient-title gradient-alt2" style="font-size: 36px;">LEADERBOARD</h2>
+        </div>
+    </div>
+</body>
+</html>

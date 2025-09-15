@@ -5,6 +5,8 @@
  * Integrates with Colormind API for dynamic palette generation
  */
 
+import { DesignSystem } from '../../config/DesignSystem';
+
 export interface ColorScheme {
   // Grid colors
   gridBackground: string;
@@ -13,7 +15,7 @@ export interface ColorScheme {
   gridBorder: string;
   gridBorderSubtle: string;
 
-  // Piece colors (neon palette)
+  // Piece colors (modern gradient-inspired palette)
   pieceColors: string[];
 
   // Interaction states
@@ -38,80 +40,80 @@ export class ColorSystem {
   private isDarkMode: boolean = false;
   private currentScheme: ColorScheme;
 
-  // Modern Neon Palette for Dark Mode
+  // Modern Dark Palette aligned with Design System
   private readonly NEON_DARK: ColorScheme = {
-    // Grid - subtle dark backgrounds
-    gridBackground: '#0a0a0f',
-    gridCell: '#1a1a2e',
-    gridCellAlt: '#1a1a2e', // Same color for uniform look
-    gridBorder: '#2a2a3e',
-    gridBorderSubtle: '#16213e',
+    // Grid - subtle dark backgrounds from Design System
+    gridBackground: DesignSystem.COLORS.solid.bgPrimary,
+    gridCell: DesignSystem.COLORS.solid.bgSecondary,
+    gridCellAlt: DesignSystem.COLORS.solid.bgTertiary,
+    gridBorder: DesignSystem.COLORS.glass.border,
+    gridBorderSubtle: DesignSystem.COLORS.glass.background,
 
-    // Neon piece colors - vibrant and glowing
+    // Modern piece colors - sophisticated gradients
     pieceColors: [
-      '#ff006e', // Hot Pink
-      '#00f5ff', // Cyan
-      '#00ff88', // Spring Green
-      '#ffaa00', // Orange
-      '#8b00ff', // Purple
-      '#ff3366', // Red Pink
-      '#00ffaa', // Aquamarine
-      '#ffd700', // Gold
+      '#667eea', // Primary purple
+      '#764ba2', // Deep purple
+      '#f093fb', // Pink
+      '#f5576c', // Coral
+      '#00f260', // Green
+      '#0575e6', // Blue
+      '#f5af19', // Gold
+      '#63a4ff', // Light blue
     ],
 
     // Interactions
-    hoverColor: '#2a2a4e',
-    validPlacement: '#00ff88',
-    invalidPlacement: '#ff0055',
+    hoverColor: DesignSystem.COLORS.solid.hover,
+    validPlacement: DesignSystem.COLORS.solid.success,
+    invalidPlacement: DesignSystem.COLORS.solid.danger,
 
     // Effects
-    glowColor: '#00f5ff',
-    successGlow: '#00ff88',
+    glowColor: '#667eea',
+    successGlow: DesignSystem.COLORS.solid.success,
     linePreviewGlow: '', // Will be set dynamically to match piece color
 
-    // UI
-    textPrimary: '#ffffff',
-    textSecondary: '#aaaaaa',
-    scorePrimary: '#00f5ff',
-    scoreBonus: '#00ff88',
+    // UI from Design System
+    textPrimary: DesignSystem.COLORS.solid.textPrimary,
+    textSecondary: DesignSystem.COLORS.solid.textSecondary,
+    scorePrimary: '#667eea',
+    scoreBonus: DesignSystem.COLORS.solid.success,
   };
 
-  // Modern Light Mode Palette
+  // Modern Light Mode Palette aligned with Design System
   private readonly MODERN_LIGHT: ColorScheme = {
-    // Grid - clean light backgrounds with subtle gray
+    // Grid - clean light backgrounds
     gridBackground: '#ffffff',
-    gridCell: '#e8e8e8',
-    gridCellAlt: '#e8e8e8', // Same color for uniform look
-    gridBorder: '#d0d0d0',
-    gridBorderSubtle: '#f0f0f0',
+    gridCell: '#f0f0f4',
+    gridCellAlt: '#e8e8ec',
+    gridBorder: 'rgba(102, 126, 234, 0.15)',
+    gridBorderSubtle: 'rgba(102, 126, 234, 0.08)',
 
-    // Vibrant piece colors for light mode
+    // Vibrant piece colors for light mode - slightly muted for elegance
     pieceColors: [
-      '#e60049', // Radical Red
-      '#0bb4ff', // Blue Cyan
-      '#50e991', // Emerald
-      '#e6a300', // Gold
-      '#9b19f5', // Purple
-      '#ffa300', // Orange
-      '#dc0ab4', // Magenta
-      '#b3d300', // Lime
+      '#5468d4', // Primary purple
+      '#6651a2', // Deep purple
+      '#d67fb3', // Pink
+      '#d44860', // Coral
+      '#00c550', // Green
+      '#0460c4', // Blue
+      '#d49817', // Gold
+      '#5290dd', // Light blue
     ],
 
     // Interactions
-    hoverColor: '#f5f5f5',
-    validPlacement: '#50e991',
-    invalidPlacement: '#e60049',
+    hoverColor: 'rgba(102, 126, 234, 0.1)',
+    validPlacement: '#00c550',
+    invalidPlacement: '#d44860',
 
     // Effects
-    glowColor: '#0bb4ff',
-    successGlow: '#50e991',
+    glowColor: '#5468d4',
+    successGlow: '#00c550',
     linePreviewGlow: '', // Will be set dynamically to match piece color
 
     // UI
-    textPrimary: '#1a1a1a',
-    textSecondary: '#666666',
-    scorePrimary: '#0bb4ff',
-    scoreBonus: '#50e991',
+    textPrimary: DesignSystem.COLORS.solid.textInverse,
+    textSecondary: 'rgba(10, 10, 15, 0.7)',
+    scorePrimary: '#5468d4',
+    scoreBonus: '#00c550',
   };
 
   private constructor() {
