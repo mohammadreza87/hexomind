@@ -218,21 +218,35 @@ export async function initializeLeaderboards(): Promise<void> {
  */
 export async function ensurePlayerInLeaderboard(username: string, score: number): Promise<void> {
   try {
-    // Always add/update the player's score in all relevant leaderboards
-    await redis.zadd('leaderboard:global', { score, member: username });
+    const applyIfHigher = async (key: string, expirySeconds?: number): Promise<void> => {
+      const existingScore = await redis.zScore(key, username);
+      const parsedScore = typeof existingScore === 'number'
+        ? existingScore
+        : existingScore !== null
+          ? parseFloat(existingScore)
+          : null;
 
-    // Add to daily
+      if (parsedScore === null || Number.isNaN(parsedScore) || score > parsedScore) {
+        await redis.zadd(key, { score, member: username });
+      }
+
+      if (expirySeconds) {
+        await redis.expire(key, expirySeconds);
+      }
+    };
+
+    await applyIfHigher('leaderboard:global');
+
     const today = new Date().toISOString().split('T')[0];
-    await redis.zadd(`leaderboard:daily:${today}`, { score, member: username });
+    await applyIfHigher(`leaderboard:daily:${today}`, 7 * 24 * 60 * 60);
 
-    // Add to weekly
     const now = new Date();
     const start = new Date(now.getFullYear(), 0, 1);
     const diff = now.getTime() - start.getTime();
     const oneWeek = 1000 * 60 * 60 * 24 * 7;
     const week = Math.floor(diff / oneWeek) + 1;
     const year = now.getFullYear();
-    await redis.zadd(`leaderboard:weekly:${year}:${week}`, { score, member: username });
+    await applyIfHigher(`leaderboard:weekly:${year}:${week}`, 30 * 24 * 60 * 60);
 
     console.log(`Ensured ${username} appears in all leaderboards with score ${score}`);
   } catch (error) {
