@@ -5,6 +5,7 @@ import { NeonThemeProvider } from '../theme/NeonThemeProvider';
 import { ViewportManager } from './ViewportManager';
 import { HexagonRenderer } from './HexagonRenderer';
 import { RenderConfig } from '../../config/RenderConfig';
+import { DepthEffects } from '../utils/DepthEffects';
 
 /**
  * BoardRenderer - Manages the visual representation of the game board
@@ -47,6 +48,7 @@ export class BoardRenderer {
   private previewGraphics: Phaser.GameObjects.Graphics;
   private linePreviewContainer: Phaser.GameObjects.Container;
   private linePreviewGraphics: Phaser.GameObjects.Graphics[];
+  private depthEffects: DepthEffects;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -79,6 +81,8 @@ export class BoardRenderer {
     this.linePreviewContainer.setDepth(75);
     this.boardContainer.add(this.linePreviewContainer);
     this.linePreviewGraphics = [];
+
+    this.depthEffects = DepthEffects.forScene(scene, this.themeProvider);
 
     this.initialize();
   }
@@ -287,6 +291,8 @@ export class BoardRenderer {
     base.setTint(bgColor);
     base.setAlpha(0.3);
 
+    const wasVisible = fill.visible;
+
     if (isOccupied) {
       const fillColor = cell?.pieceColorIndex !== undefined
         ? this.themeProvider.getPieceColorByIndex(cell.pieceColorIndex)
@@ -294,7 +300,14 @@ export class BoardRenderer {
       fill.setTint(fillColor);
       fill.setVisible(true);
       fill.setAlpha(1);
+
+      if (!wasVisible) {
+        this.depthEffects.celebrateCellFill(fill, fillColor);
+      }
     } else {
+      if (wasVisible) {
+        this.depthEffects.cleanupGameObject(fill);
+      }
       fill.setVisible(false);
     }
   }
@@ -741,6 +754,9 @@ export class BoardRenderer {
             duration: animDuration,
             delay: index * perCellDelay, // Sequential delay for wave effect
             ease: 'Power2.easeIn',
+            onStart: () => {
+              this.depthEffects.highlightLineClear(img, img.tintTopLeft);
+            },
             onComplete: () => {
               completed++;
 
@@ -754,6 +770,8 @@ export class BoardRenderer {
               img.setScale(1);
               img.setDisplaySize(dim - 2, dim - 2);
               img.setAlpha(1);
+
+              this.depthEffects.cleanupGameObject(img);
 
               // When all animations complete
               if (completed === total) {

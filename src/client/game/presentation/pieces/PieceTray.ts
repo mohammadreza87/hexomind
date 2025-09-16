@@ -394,6 +394,7 @@ export class PieceTray {
               this.container.add(container);
               container.setPosition(originalX, originalY);
               container.setDepth(10);
+              renderer.syncDepthBase();
             }
           });
         }
@@ -403,21 +404,13 @@ export class PieceTray {
     // Hover effects
     container.on('pointerover', () => {
       if (!renderer.isDragging()) {
-        this.scene.tweens.add({
-          targets: container,
-          scale: 1.05,
-          duration: 100
-        });
+        renderer.applyHoverDepth();
       }
     });
 
     container.on('pointerout', () => {
       if (!renderer.isDragging()) {
-        this.scene.tweens.add({
-          targets: container,
-          scale: 1,
-          duration: 100
-        });
+        renderer.releaseHoverDepth();
       }
     });
   }
