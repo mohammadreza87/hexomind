@@ -774,6 +774,11 @@ export class MainScene extends Phaser.Scene {
     // Update score
     this.updateScore(totalPoints);
 
+    // Add camera shake effect based on lines cleared
+    const shakeIntensity = 0.003 + (lines.length * 0.002);
+    const shakeDuration = 200 + (lines.length * 50);
+    this.cameras.main.shake(shakeDuration, shakeIntensity, true);
+
     // Animate the line clearing with smooth wave effect
     await this.boardRenderer.animateLineClear(lines);
 
