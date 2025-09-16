@@ -2,6 +2,32 @@
 
 /* Container setup */
 #game-container {
+  container-type: inline-size;
+  container-name: game-area;
+
+  /* Responsive layout tokens exposed via container queries */
+  --game-safe-margin-top: 64px;
+  --game-safe-margin-bottom: 120px;
+  --game-safe-margin-sides: 16px;
+
+  --game-board-area-ratio: 0.68;
+  --game-piece-area-ratio: 0.27;
+  --game-piece-area-gap: 20px;
+
+  --game-scale-min: 0.5;
+  --game-scale-max: 1.5;
+
+  --game-hex-size-min: 30;
+  --game-hex-size-max: 60;
+  --game-hex-spacing-ratio: 0.08;
+  --game-hex-scale-factor: 0.95;
+
+  --game-tray-slot-min: 60;
+  --game-tray-slot-max: 100;
+  --game-tray-available-width: 0.9;
+  --game-tray-bottom-offset: 0.12;
+  --game-tray-min-spacing: 12px;
+
   /* Ensure proper sizing */
   width: 100%;
   height: 100%;
@@ -12,6 +38,111 @@
   -webkit-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;
+}
+
+@container game-area (min-width: 480px) {
+  #game-container {
+    --game-safe-margin-top: 72px;
+    --game-safe-margin-bottom: 140px;
+    --game-safe-margin-sides: 18px;
+
+    --game-board-area-ratio: 0.7;
+    --game-piece-area-ratio: 0.26;
+    --game-piece-area-gap: 22px;
+
+    --game-hex-size-max: 62;
+    --game-hex-scale-factor: 0.96;
+
+    --game-tray-slot-min: 64;
+    --game-tray-slot-max: 108;
+    --game-tray-available-width: 0.88;
+    --game-tray-bottom-offset: 0.1;
+    --game-tray-min-spacing: 14px;
+  }
+}
+
+@container game-area (min-width: 768px) {
+  #game-container {
+    --game-safe-margin-top: 80px;
+    --game-safe-margin-bottom: 150px;
+    --game-safe-margin-sides: 24px;
+
+    --game-board-area-ratio: 0.72;
+    --game-piece-area-ratio: 0.24;
+    --game-piece-area-gap: 24px;
+
+    --game-hex-size-max: 66;
+    --game-hex-scale-factor: 0.97;
+
+    --game-tray-slot-min: 72;
+    --game-tray-slot-max: 112;
+    --game-tray-available-width: 0.84;
+    --game-tray-bottom-offset: 0.09;
+    --game-tray-min-spacing: 16px;
+  }
+}
+
+@container game-area (min-width: 1024px) {
+  #game-container {
+    --game-safe-margin-top: 88px;
+    --game-safe-margin-bottom: 160px;
+    --game-safe-margin-sides: 32px;
+
+    --game-board-area-ratio: 0.74;
+    --game-piece-area-ratio: 0.22;
+    --game-piece-area-gap: 26px;
+
+    --game-hex-size-max: 72;
+    --game-hex-scale-factor: 0.99;
+
+    --game-tray-slot-min: 80;
+    --game-tray-slot-max: 120;
+    --game-tray-available-width: 0.8;
+    --game-tray-bottom-offset: 0.08;
+    --game-tray-min-spacing: 18px;
+  }
+}
+
+@container game-area (min-width: 1280px) {
+  #game-container {
+    --game-safe-margin-top: 96px;
+    --game-safe-margin-bottom: 180px;
+    --game-safe-margin-sides: 36px;
+
+    --game-board-area-ratio: 0.76;
+    --game-piece-area-ratio: 0.2;
+    --game-piece-area-gap: 30px;
+
+    --game-hex-size-max: 78;
+    --game-hex-scale-factor: 1.01;
+
+    --game-tray-slot-min: 90;
+    --game-tray-slot-max: 130;
+    --game-tray-available-width: 0.76;
+    --game-tray-bottom-offset: 0.07;
+    --game-tray-min-spacing: 20px;
+  }
+}
+
+@container game-area (min-width: 1536px) {
+  #game-container {
+    --game-safe-margin-top: 104px;
+    --game-safe-margin-bottom: 200px;
+    --game-safe-margin-sides: 40px;
+
+    --game-board-area-ratio: 0.78;
+    --game-piece-area-ratio: 0.18;
+    --game-piece-area-gap: 32px;
+
+    --game-hex-size-max: 84;
+    --game-hex-scale-factor: 1.02;
+
+    --game-tray-slot-min: 100;
+    --game-tray-slot-max: 144;
+    --game-tray-available-width: 0.72;
+    --game-tray-bottom-offset: 0.06;
+    --game-tray-min-spacing: 22px;
+  }
 }
 
 /* Canvas specific optimizations for high-DPI */

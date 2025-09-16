@@ -110,32 +110,37 @@ export class BoardRenderer {
    * Calculate optimal hexagon size for viewport
    */
   private calculateOptimalSize(): void {
-    const viewport = this.viewportManager.getViewport();
+    const boardArea = this.viewportManager.getBoardArea();
 
     // Calculate size needed for radius-3 grid to fit comfortably
     // Radius 3 = 7 hexagons wide, 7 hexagons tall
     const gridWidth = 7;
     const gridHeight = 7;
 
-    // Account for margins and piece tray at bottom
-    // Leave space for piece tray and margins
-    const availableWidth = viewport.width * 0.85;  // Reasonable width
-    const availableHeight = viewport.height * 0.48; // Reasonable height for grid
+    const maxHex = this.viewportManager.getContainerMetric('--game-hex-size-max', 60);
+    const minHex = this.viewportManager.getContainerMetric('--game-hex-size-min', 30);
+    const spacingRatio = this.viewportManager.getContainerMetric('--game-hex-spacing-ratio', 0.08);
+    const scaleAdjust = this.viewportManager.getContainerMetric('--game-hex-scale-factor', 0.95);
+
+    if (boardArea.width <= 0 || boardArea.height <= 0) {
+      this.hexSize = Math.max(minHex * scaleAdjust, minHex);
+      this.hexSpacing = this.hexSize * spacingRatio;
+      return;
+    }
 
     // Calculate hex size based on available space
     // Width: size * sqrt(3) * gridWidth
     // Height: size * 1.5 * gridHeight
-    const sizeByWidth = availableWidth / (Math.sqrt(3) * gridWidth);
-    const sizeByHeight = availableHeight / (1.5 * gridHeight);
+    const sizeByWidth = boardArea.width / (Math.sqrt(3) * gridWidth);
+    const sizeByHeight = boardArea.height / (1.5 * gridHeight);
 
     // Use the smaller to ensure it fits
-    this.hexSize = Math.min(sizeByWidth, sizeByHeight, 60); // Adjusted for smaller scale
-    this.hexSize = Math.max(this.hexSize, 30); // Minimum size for visibility
-    // Make grid 5% smaller overall
-    this.hexSize *= 0.95;
+    this.hexSize = Math.min(sizeByWidth, sizeByHeight, maxHex);
+    this.hexSize = Math.max(this.hexSize, minHex);
+    this.hexSize *= scaleAdjust;
 
     // Add spacing between cells for better visual clarity
-    this.hexSpacing = this.hexSize * 0.08; // 8% spacing for clear separation
+    this.hexSpacing = this.hexSize * spacingRatio;
   }
 
   /**

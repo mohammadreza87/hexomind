@@ -10,6 +10,15 @@ export class ViewportManager {
   private scene: Phaser.Scene;
   private safeArea: Phaser.Geom.Rectangle;
   private scaleFactor: number = 1;
+  private containerElement: HTMLElement | null = null;
+  private useContainerQueries: boolean = false;
+  private containerWidth: number = 0;
+  private containerHeight: number = 0;
+  private boardAreaRatio: number = 0.7;
+  private pieceTrayRatio: number = 0.25;
+  private pieceTrayGap: number = 20;
+  private containerStyles: CSSStyleDeclaration | null = null;
+  private resizeObserver?: ResizeObserver;
 
   // Safe area margins (for UI elements)
   private readonly MARGIN_TOP = 80;    // Space for score/UI
@@ -18,47 +27,126 @@ export class ViewportManager {
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
+    this.containerElement = this.resolveContainerElement();
+    this.useContainerQueries = this.detectContainerQuerySupport();
+
+    if (this.containerElement) {
+      const rect = this.containerElement.getBoundingClientRect();
+      this.containerWidth = rect.width || this.scene.cameras.main.width;
+      this.containerHeight = rect.height || this.scene.cameras.main.height;
+    } else {
+      this.containerWidth = this.scene.cameras.main.width;
+      this.containerHeight = this.scene.cameras.main.height;
+    }
+
+    if (this.useContainerQueries) {
+      this.refreshContainerStyles();
+    }
+
     this.calculateSafeArea();
     this.setupResizeHandlers();
+  }
+
+  private resolveContainerElement(): HTMLElement | null {
+    const scaleParent = this.scene.scale?.parent;
+    if (scaleParent instanceof HTMLElement) {
+      return scaleParent;
+    }
+
+    const canvasParent = this.scene.game.canvas?.parentElement;
+    if (canvasParent instanceof HTMLElement) {
+      return canvasParent;
+    }
+
+    return null;
+  }
+
+  private detectContainerQuerySupport(): boolean {
+    if (typeof window === 'undefined' || typeof CSS === 'undefined') {
+      return false;
+    }
+
+    const hasResizeObserver = 'ResizeObserver' in window;
+    const supportsContainer = typeof CSS.supports === 'function' && CSS.supports('container-type: inline-size');
+
+    return !!this.containerElement && hasResizeObserver && supportsContainer;
+  }
+
+  private refreshContainerStyles(): void {
+    if (!this.containerElement || !this.useContainerQueries) {
+      this.containerStyles = null;
+      this.boardAreaRatio = 0.7;
+      this.pieceTrayRatio = 0.25;
+      this.pieceTrayGap = 20;
+      return;
+    }
+
+    this.containerStyles = getComputedStyle(this.containerElement);
+    this.boardAreaRatio = this.readMetric('--game-board-area-ratio', 0.7);
+    this.pieceTrayRatio = this.readMetric('--game-piece-area-ratio', 0.25);
+    this.pieceTrayGap = this.readMetric('--game-piece-area-gap', 20);
+  }
+
+  private readMetric(varName: string, fallback: number): number {
+    if (!this.containerStyles) {
+      return fallback;
+    }
+
+    const raw = this.containerStyles.getPropertyValue(varName);
+
+    if (!raw) {
+      return fallback;
+    }
+
+    const parsed = parseFloat(raw);
+    return Number.isFinite(parsed) ? parsed : fallback;
   }
 
   /**
    * Calculate the safe area for game content
    */
   private calculateSafeArea(): void {
-    const { width, height } = this.scene.cameras.main;
+    const width = this.containerWidth || this.scene.cameras.main.width;
+    const height = this.containerHeight || this.scene.cameras.main.height;
 
-    // Calculate safe area excluding UI margins
-    const safeWidth = width - (this.MARGIN_SIDES * 2);
-    const safeHeight = height - this.MARGIN_TOP - this.MARGIN_BOTTOM;
+    const marginTop = this.useContainerQueries
+      ? this.readMetric('--game-safe-margin-top', this.MARGIN_TOP)
+      : this.MARGIN_TOP;
+    const marginBottom = this.useContainerQueries
+      ? this.readMetric('--game-safe-margin-bottom', this.MARGIN_BOTTOM)
+      : this.MARGIN_BOTTOM;
+    const marginSides = this.useContainerQueries
+      ? this.readMetric('--game-safe-margin-sides', this.MARGIN_SIDES)
+      : this.MARGIN_SIDES;
+
+    const safeWidth = Math.max(width - (marginSides * 2), 0);
+    const safeHeight = Math.max(height - marginTop - marginBottom, 0);
 
     this.safeArea = new Phaser.Geom.Rectangle(
-      this.MARGIN_SIDES,
-      this.MARGIN_TOP,
+      marginSides,
+      marginTop,
       safeWidth,
       safeHeight
     );
 
-    // Calculate scale factor for responsive sizing
-    this.calculateScaleFactor();
+    this.calculateScaleFactor(width, height);
   }
 
   /**
-   * Calculate scale factor based on device
+   * Calculate scale factor based on device or container size
    */
-  private calculateScaleFactor(): void {
-    const { width, height } = this.scene.cameras.main;
-
-    // Base resolution for scale calculations
+  private calculateScaleFactor(width: number, height: number): void {
     const baseWidth = 1024;
     const baseHeight = 768;
 
-    // Calculate scale based on smaller dimension to ensure fit
     const scaleX = width / baseWidth;
     const scaleY = height / baseHeight;
 
-    this.scaleFactor = Math.min(scaleX, scaleY, 1.5); // Cap at 1.5x for performance
-    this.scaleFactor = Math.max(this.scaleFactor, 0.5); // Min 0.5x for visibility
+    const maxScale = this.getContainerMetric('--game-scale-max', 1.5);
+    const minScale = this.getContainerMetric('--game-scale-min', 0.5);
+
+    this.scaleFactor = Math.min(scaleX, scaleY, maxScale);
+    this.scaleFactor = Math.max(this.scaleFactor, minScale);
   }
 
   /**
@@ -69,13 +157,55 @@ export class ViewportManager {
       this.handleResize(gameSize);
     });
 
+    if (this.useContainerQueries && this.containerElement) {
+      this.resizeObserver = new ResizeObserver(entries => {
+        for (const entry of entries) {
+          if (entry.target !== this.containerElement) {
+            continue;
+          }
+
+          const { width, height } = entry.contentRect;
+          if (!width || !height) {
+            continue;
+          }
+
+          this.containerWidth = width;
+          this.containerHeight = height;
+          this.refreshContainerStyles();
+
+          if (
+            this.scene.scale.gameSize.width !== width ||
+            this.scene.scale.gameSize.height !== height
+          ) {
+            this.scene.scale.resize(width, height);
+          } else {
+            const size = { width, height } as Phaser.Structs.Size;
+            this.handleResize(size);
+          }
+        }
+      });
+
+      this.resizeObserver.observe(this.containerElement);
+    }
+
     // Also listen for orientation changes on mobile
     if (this.isMobile()) {
       window.addEventListener('orientationchange', () => {
         setTimeout(() => {
+          if (this.useContainerQueries && this.containerElement) {
+            const rect = this.containerElement.getBoundingClientRect();
+            if (rect.width && rect.height) {
+              this.containerWidth = rect.width;
+              this.containerHeight = rect.height;
+              this.refreshContainerStyles();
+              this.scene.scale.resize(rect.width, rect.height);
+              return;
+            }
+          }
+
           this.calculateSafeArea();
           this.scene.events.emit('viewport:changed', this.getViewport());
-        }, 100); // Small delay for orientation animation
+        }, 100);
       });
     }
   }
@@ -84,6 +214,13 @@ export class ViewportManager {
    * Handle window resize
    */
   private handleResize(gameSize: Phaser.Structs.Size): void {
+    this.containerWidth = gameSize.width;
+    this.containerHeight = gameSize.height;
+
+    if (this.useContainerQueries) {
+      this.refreshContainerStyles();
+    }
+
     this.calculateSafeArea();
     this.scene.events.emit('viewport:changed', this.getViewport());
   }
@@ -101,7 +238,8 @@ export class ViewportManager {
     isMobile: boolean;
     isLandscape: boolean;
   } {
-    const { width, height } = this.scene.cameras.main;
+    const width = this.containerWidth || this.scene.cameras.main.width;
+    const height = this.containerHeight || this.scene.cameras.main.height;
 
     return {
       width,
@@ -130,11 +268,16 @@ export class ViewportManager {
    */
   getBoardArea(): Phaser.Geom.Rectangle {
     // Board takes up the safe area
+    const boardHeight = Math.min(
+      this.safeArea.height,
+      this.safeArea.height * this.boardAreaRatio
+    );
+
     return new Phaser.Geom.Rectangle(
       this.safeArea.x,
       this.safeArea.y,
       this.safeArea.width,
-      this.safeArea.height * 0.7 // Leave space for pieces below
+      boardHeight
     );
   }
 
@@ -144,25 +287,54 @@ export class ViewportManager {
   getPieceTrayArea(): Phaser.Geom.Rectangle {
     const boardArea = this.getBoardArea();
 
+    const desiredHeight = Math.max(this.safeArea.height * this.pieceTrayRatio, 0);
+    const availableHeight = Math.max(
+      this.safeArea.bottom - boardArea.bottom - this.pieceTrayGap,
+      0
+    );
+    const trayHeight = Math.min(desiredHeight, availableHeight);
+    const trayY = Math.min(
+      boardArea.bottom + this.pieceTrayGap,
+      this.safeArea.bottom - trayHeight
+    );
+
     return new Phaser.Geom.Rectangle(
       this.safeArea.x,
-      boardArea.bottom + 20,
+      trayY,
       this.safeArea.width,
-      this.safeArea.height * 0.25
+      trayHeight
     );
+  }
+
+  getContainerMetric(varName: string, fallback: number): number {
+    if (!this.useContainerQueries) {
+      return fallback;
+    }
+
+    if (!this.containerStyles) {
+      this.refreshContainerStyles();
+    }
+
+    return this.readMetric(varName, fallback);
+  }
+
+  supportsContainerQueries(): boolean {
+    return this.useContainerQueries;
   }
 
   /**
    * Get UI area (top bar for score, etc.)
    */
   getUIArea(): Phaser.Geom.Rectangle {
-    const { width } = this.scene.cameras.main;
+    const width = this.containerWidth || this.scene.cameras.main.width;
 
     return new Phaser.Geom.Rectangle(
       0,
       0,
       width,
-      this.MARGIN_TOP
+      this.useContainerQueries
+        ? this.readMetric('--game-safe-margin-top', this.MARGIN_TOP)
+        : this.MARGIN_TOP
     );
   }
 
