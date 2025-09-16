@@ -199,20 +199,21 @@ router.post('/api/highscore', async (req, res): Promise<void> => {
       timeoutPromise,
       (async () => {
         const updated = await setUserHighScore(username, score);
+        const authoritativeScore = updated ? score : await getUserHighScore(username);
 
-        // Ensure player appears in all leaderboards
-        await ensurePlayerInLeaderboard(username, score);
+        // Ensure player appears in all leaderboards using their best score
+        await ensurePlayerInLeaderboard(username, authoritativeScore);
 
         // Fire and forget for non-critical updates to avoid blocking
         Promise.all([
-          updateDailyLeaderboard(username, score).catch(err =>
+          updateDailyLeaderboard(username, authoritativeScore).catch(err =>
             console.error('Failed to update daily leaderboard:', err)
           ),
-          updateWeeklyLeaderboard(username, score).catch(err =>
+          updateWeeklyLeaderboard(username, authoritativeScore).catch(err =>
             console.error('Failed to update weekly leaderboard:', err)
           ),
           context.subredditName ?
-            updateSubredditLeaderboard(username, score, context.subredditName).catch(err =>
+            updateSubredditLeaderboard(username, authoritativeScore, context.subredditName).catch(err =>
               console.error('Failed to update subreddit leaderboard:', err)
             ) : Promise.resolve(),
           incrementGamesPlayed().catch(err =>
@@ -222,7 +223,7 @@ router.post('/api/highscore', async (req, res): Promise<void> => {
 
         // Only get rank if score was updated
         const rank = updated ? await getUserRank(username) : null;
-        const highScore = updated ? score : await getUserHighScore(username);
+        const highScore = authoritativeScore;
 
         return {
           updated,

@@ -108,7 +108,16 @@ export async function updateDailyLeaderboard(username: string, score: number): P
     const today = new Date().toISOString().split('T')[0];
     const key = `leaderboard:daily:${today}`;
 
-    await redis.zadd(key, { score, member: username });
+    const existingScore = await redis.zScore(key, username);
+    const parsedScore = typeof existingScore === 'number'
+      ? existingScore
+      : existingScore !== null
+        ? parseFloat(existingScore)
+        : null;
+
+    if (parsedScore === null || Number.isNaN(parsedScore) || score > parsedScore) {
+      await redis.zadd(key, { score, member: username });
+    }
 
     // Set expiry for daily leaderboard (7 days)
     await redis.expire(key, 7 * 24 * 60 * 60);
@@ -177,7 +186,16 @@ export async function updateWeeklyLeaderboard(username: string, score: number): 
     const { week, year } = getWeekInfo();
     const key = `leaderboard:weekly:${year}:${week}`;
 
-    await redis.zadd(key, { score, member: username });
+    const existingScore = await redis.zScore(key, username);
+    const parsedScore = typeof existingScore === 'number'
+      ? existingScore
+      : existingScore !== null
+        ? parseFloat(existingScore)
+        : null;
+
+    if (parsedScore === null || Number.isNaN(parsedScore) || score > parsedScore) {
+      await redis.zadd(key, { score, member: username });
+    }
 
     // Set expiry for weekly leaderboard (30 days)
     await redis.expire(key, 30 * 24 * 60 * 60);
