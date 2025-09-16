@@ -21,6 +21,23 @@ export class GameOverUI extends Phaser.GameObjects.Container {
 
     const { width, height } = scene.cameras.main;
 
+    const spacing = {
+      xl: DS.getSpacingValue('xl'),
+      xxl: DS.getSpacingValue('xxl'),
+      xxxl: DS.getSpacingValue('xxxl'),
+    };
+
+    const colors = {
+      bgPrimary: DS.getColor('solid', 'bgPrimary'),
+      bgElevated: DS.getColor('solid', 'bgElevated'),
+      glassBorder: DS.getColor('glass', 'border'),
+      textPrimary: DS.getColor('solid', 'textPrimary'),
+      danger: DS.getColor('solid', 'danger'),
+      warning: DS.getColor('solid', 'warning'),
+      info: DS.getColor('solid', 'info'),
+      success: DS.getColor('solid', 'success'),
+    };
+
     // Ensure this UI sits above everything else and starts hidden
     this.setDepth(1000);
     this.setVisible(false);
@@ -31,7 +48,7 @@ export class GameOverUI extends Phaser.GameObjects.Container {
       height / 2,
       width,
       height,
-      DS.hexToNumber(DS.COLORS.solid.bgPrimary),
+      DS.colorStringToNumber(colors.bgPrimary),
       0.85
     );
     this.background.setInteractive();
@@ -45,22 +62,22 @@ export class GameOverUI extends Phaser.GameObjects.Container {
       height / 2,
       panelWidth,
       panelHeight,
-      DS.hexToNumber(DS.COLORS.solid.bgElevated),
+      DS.colorStringToNumber(colors.bgElevated),
       0.95
     );
-    this.panel.setStrokeStyle(1, DS.hexToNumber(DS.COLORS.glass.border));
+    this.panel.setStrokeStyle(1, DS.colorStringToNumber(colors.glassBorder));
     this.add(this.panel);
 
     // Game Over title with Inter Black font
     this.gameOverText = scene.add.text(
       width / 2,
-      height / 2 - panelHeight / 2 + DS.SPACING.xxl,
+      height / 2 - panelHeight / 2 + spacing.xxl,
       'GAME OVER',
       {
-        fontSize: DS.TYPOGRAPHY.fontSize['3xl'],
-        fontFamily: DS.TYPOGRAPHY.fontFamily.displayBlack,
+        fontSize: DS.getFontSize('3xl'),
+        fontFamily: DS.getFontFamily('displayBlack'),
         fontStyle: '900 normal', // Inter Black
-        color: DS.COLORS.solid.danger,
+        color: colors.danger,
         align: 'center'
       }
     ).setOrigin(0.5);
@@ -69,13 +86,13 @@ export class GameOverUI extends Phaser.GameObjects.Container {
     // Score display with bold Inter font
     this.scoreText = scene.add.text(
       width / 2,
-      height / 2 - panelHeight / 2 + DS.SPACING.xxl + DS.SPACING.xxxl,
+      height / 2 - panelHeight / 2 + spacing.xxl + spacing.xxxl,
       'Score: 0',
       {
-        fontSize: DS.TYPOGRAPHY.fontSize['2xl'],
-        fontFamily: DS.TYPOGRAPHY.fontFamily.display,
+        fontSize: DS.getFontSize('2xl'),
+        fontFamily: DS.getFontFamily('display'),
         fontStyle: '700 normal', // Bold
-        color: DS.COLORS.solid.textPrimary,
+        color: colors.textPrimary,
         align: 'center'
       }
     ).setOrigin(0.5);
@@ -84,10 +101,10 @@ export class GameOverUI extends Phaser.GameObjects.Container {
     // Best score display with consistent spacing
     this.bestScoreText = scene.add.text(
       width / 2,
-      height / 2 - panelHeight / 2 + DS.SPACING.xxl + DS.SPACING.xxxl + DS.SPACING.xl,
+      height / 2 - panelHeight / 2 + spacing.xxl + spacing.xxxl + spacing.xl,
       'Best: 0',
       DS.getTextStyle('body', {
-        color: DS.COLORS.solid.warning,
+        color: colors.warning,
         weight: 'medium'
       })
     ).setOrigin(0.5);
@@ -96,10 +113,10 @@ export class GameOverUI extends Phaser.GameObjects.Container {
     // Daily rank display with modern font
     this.dailyRankText = scene.add.text(
       width / 2,
-      height / 2 - panelHeight / 2 + DS.SPACING.xxl + DS.SPACING.xxxl + DS.SPACING.xxxl,
+      height / 2 - panelHeight / 2 + spacing.xxl + spacing.xxxl + spacing.xxxl,
       'Daily Rank: Loading...',
       DS.getTextStyle('caption', {
-        color: DS.COLORS.solid.info,
+        color: colors.info,
         weight: 'regular'
       })
     ).setOrigin(0.5);
@@ -109,9 +126,9 @@ export class GameOverUI extends Phaser.GameObjects.Container {
     this.leaderboardButton = this.createButton(
       scene,
       width / 2,
-      height / 2 + DS.SPACING.xl,
+      height / 2 + spacing.xl,
       'Leaderboard',
-      DS.hexToNumber(DS.COLORS.solid.info),
+      colors.info,
       () => {
         this.emit('showLeaderboard');
       }
@@ -122,9 +139,9 @@ export class GameOverUI extends Phaser.GameObjects.Container {
     this.tryAgainButton = this.createButton(
       scene,
       width / 2,
-      height / 2 + DS.SPACING.xl + DS.SPACING.xxxl,
+      height / 2 + spacing.xl + spacing.xxxl,
       'Try Again',
-      DS.hexToNumber(DS.COLORS.solid.success),
+      colors.success,
       () => {
         this.emit('tryAgain');
         this.hide();
@@ -147,21 +164,21 @@ export class GameOverUI extends Phaser.GameObjects.Container {
     x: number,
     y: number,
     text: string,
-    color: number,
+    color: string,
     onClick: () => void
   ): Phaser.GameObjects.Container {
     const button = scene.add.container(x, y);
 
     const buttonWidth = 200;
-    const buttonHeight = DS.SPACING.xxl;
+    const buttonHeight = DS.getSpacingValue('xxl');
 
-    const bg = scene.add.rectangle(0, 0, buttonWidth, buttonHeight, color, 0.9);
-    bg.setStrokeStyle(1, DS.hexToNumber(DS.COLORS.glass.border));
+    const bg = scene.add.rectangle(0, 0, buttonWidth, buttonHeight, DS.colorStringToNumber(color), 0.9);
+    bg.setStrokeStyle(1, DS.colorStringToNumber(DS.getColor('glass', 'border')));
     bg.setInteractive();
 
     const label = scene.add.text(0, 0, text,
       DS.getTextStyle('button', {
-        color: DS.COLORS.solid.textPrimary,
+        color: DS.getColor('solid', 'textPrimary'),
         weight: 'medium'
       })
     ).setOrigin(0.5);

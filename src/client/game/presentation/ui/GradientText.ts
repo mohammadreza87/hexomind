@@ -24,7 +24,7 @@ export class GradientText extends Phaser.GameObjects.Container {
     // Create the main text with Inter Black (900 weight)
     this.mainText = scene.add.text(0, 0, text, {
       ...style,
-      fontFamily: DS.TYPOGRAPHY.fontFamily.display,
+      fontFamily: DS.getFontFamily('display'),
       fontStyle: '900 normal', // Inter Black weight
     });
     this.mainText.setOrigin(0.5, 0.5);
@@ -225,7 +225,7 @@ export function createGradientText(
 
   const style: Phaser.Types.GameObjects.Text.TextStyle = {
     fontSize,
-    fontFamily: DS.TYPOGRAPHY.fontFamily.display,
+    fontFamily: DS.getFontFamily('display'),
     fontStyle: '900 normal', // Inter Black
     align: 'center'
   };
