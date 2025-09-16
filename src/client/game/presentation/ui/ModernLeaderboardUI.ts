@@ -51,10 +51,14 @@ export class ModernLeaderboardUI extends Phaser.GameObjects.Container {
 
     const { width, height } = scene.cameras.main;
 
+    const palette = this.getPalette();
+    const displayFont = DS.getFontFamily('display');
+    const bodyFont = DS.getFontFamily('body');
+
     // Dark overlay background
     this.background = scene.add.rectangle(
       width / 2, height / 2, width, height,
-      0x000000, 0.8
+      DS.colorStringToNumber(palette.overlay), 0.8
     );
     this.background.setInteractive();
     this.add(this.background);
@@ -66,9 +70,9 @@ export class ModernLeaderboardUI extends Phaser.GameObjects.Container {
     this.panel = scene.add.rectangle(
       width / 2, height / 2,
       panelWidth, panelHeight,
-      DS.hexToNumber('#1a1a2e'), 1
+      DS.colorStringToNumber(palette.panelBackground), 1
     );
-    this.panel.setStrokeStyle(2, DS.hexToNumber('#667eea'), 0.3);
+    this.panel.setStrokeStyle(2, DS.colorStringToNumber(palette.panelBorder), 0.3);
     this.add(this.panel);
 
     // Title with gradient effect
@@ -76,10 +80,10 @@ export class ModernLeaderboardUI extends Phaser.GameObjects.Container {
       width / 2, height / 2 - panelHeight / 2 + 40,
       'LEADERBOARD',
       {
-        fontSize: '32px',
-        fontFamily: DS.TYPOGRAPHY.fontFamily.display,
+        fontSize: DS.getFontSize('2xl'),
+        fontFamily: displayFont,
         fontStyle: '900 normal',
-        color: '#ffffff'
+        color: palette.textPrimary
       }
     ).setOrigin(0.5);
     this.add(this.titleText);
@@ -121,17 +125,17 @@ export class ModernLeaderboardUI extends Phaser.GameObjects.Container {
 
     // Loading indicator
     this.loadingText = scene.add.text(0, 0, 'Loading...', {
-      fontSize: '18px',
-      fontFamily: DS.TYPOGRAPHY.fontFamily.body,
-      color: '#888888'
+      fontSize: DS.getFontSize('lg'),
+      fontFamily: bodyFont,
+      color: palette.gray
     }).setOrigin(0.5).setVisible(false);
     this.contentContainer.add(this.loadingText);
 
     // Empty state
     this.emptyText = scene.add.text(0, 0, 'No scores yet.\nBe the first!', {
-      fontSize: '18px',
-      fontFamily: DS.TYPOGRAPHY.fontFamily.body,
-      color: '#666666',
+      fontSize: DS.getFontSize('lg'),
+      fontFamily: bodyFont,
+      color: palette.grayMuted,
       align: 'center'
     }).setOrigin(0.5).setVisible(false);
     this.contentContainer.add(this.emptyText);
@@ -151,27 +155,28 @@ export class ModernLeaderboardUI extends Phaser.GameObjects.Container {
   private createCloseButton(scene: Phaser.Scene, x: number, y: number): void {
     this.closeButton = scene.add.container(x, y);
 
-    const bg = scene.add.circle(0, 0, 20, DS.hexToNumber('#2a2a3e'), 1);
-    bg.setStrokeStyle(1, DS.hexToNumber('#667eea'), 0.3);
+    const palette = this.getPalette();
+    const bg = scene.add.circle(0, 0, 20, DS.colorStringToNumber(palette.closeBg), 1);
+    bg.setStrokeStyle(1, DS.colorStringToNumber(palette.panelBorder), 0.3);
     bg.setInteractive();
 
     const closeX = scene.add.text(0, 0, '✕', {
-      fontSize: '20px',
-      fontFamily: DS.TYPOGRAPHY.fontFamily.body,
-      color: '#888888'
+      fontSize: DS.getFontSize('lg'),
+      fontFamily: DS.getFontFamily('body'),
+      color: palette.closeText
     }).setOrigin(0.5);
 
     this.closeButton.add([bg, closeX]);
 
     bg.on('pointerover', () => {
-      bg.setFillStyle(DS.hexToNumber('#3a3a4e'));
-      closeX.setColor('#ffffff');
+      bg.setFillStyle(DS.colorStringToNumber(palette.closeBgHover));
+      closeX.setColor(palette.textPrimary);
       scene.input.setDefaultCursor('pointer');
     });
 
     bg.on('pointerout', () => {
-      bg.setFillStyle(DS.hexToNumber('#2a2a3e'));
-      closeX.setColor('#888888');
+      bg.setFillStyle(DS.colorStringToNumber(palette.closeBg));
+      closeX.setColor(palette.closeText);
       scene.input.setDefaultCursor('default');
     });
 
@@ -188,12 +193,13 @@ export class ModernLeaderboardUI extends Phaser.GameObjects.Container {
 
     const tabWidth = (panelWidth - 60) / 3;
     const tabHeight = 40;
+    const palette = this.getPalette();
 
     // Tab indicator (animated underline)
     this.tabIndicator = scene.add.rectangle(
       -tabWidth - 10, tabHeight / 2 + 5,
       tabWidth - 20, 3,
-      DS.hexToNumber('#667eea'), 1
+      DS.colorStringToNumber(palette.highlight), 1
     );
     this.tabContainer.add(this.tabIndicator);
 
@@ -227,15 +233,17 @@ export class ModernLeaderboardUI extends Phaser.GameObjects.Container {
     width: number
   ): Phaser.GameObjects.Container {
     const tab = scene.add.container(x, y);
+    const palette = this.getPalette();
+    const displayFont = DS.getFontFamily('display');
 
     const bg = scene.add.rectangle(0, 0, width - 20, 35, 0x000000, 0);
     bg.setInteractive();
 
     const text = scene.add.text(0, 0, label, {
-      fontSize: '14px',
-      fontFamily: DS.TYPOGRAPHY.fontFamily.display,
+      fontSize: DS.getFontSize('sm'),
+      fontFamily: displayFont,
       fontStyle: '700 normal',
-      color: type === this.activeTab ? '#ffffff' : '#666666'
+      color: type === this.activeTab ? palette.textPrimary : palette.grayMuted
     }).setOrigin(0.5);
 
     tab.add([bg, text]);
@@ -244,14 +252,14 @@ export class ModernLeaderboardUI extends Phaser.GameObjects.Container {
 
     bg.on('pointerover', () => {
       if (type !== this.activeTab) {
-        text.setColor('#aaaaaa');
+        text.setColor(palette.grayLight);
         scene.input.setDefaultCursor('pointer');
       }
     });
 
     bg.on('pointerout', () => {
       if (type !== this.activeTab) {
-        text.setColor('#666666');
+        text.setColor(palette.grayMuted);
         scene.input.setDefaultCursor('default');
       }
     });
@@ -272,10 +280,11 @@ export class ModernLeaderboardUI extends Phaser.GameObjects.Container {
     this.activeTab = type;
 
     // Update tab text colors
+    const palette = this.getPalette();
     [this.dailyTab, this.weeklyTab, this.allTimeTab].forEach(tab => {
       const tabType = tab.getData('type') as LeaderboardType;
       const text = tab.getData('text') as Phaser.GameObjects.Text;
-      text.setColor(tabType === type ? '#ffffff' : '#666666');
+      text.setColor(tabType === type ? palette.textPrimary : palette.grayMuted);
     });
 
     // Animate indicator
@@ -313,49 +322,56 @@ export class ModernLeaderboardUI extends Phaser.GameObjects.Container {
     width: number
   ): Phaser.GameObjects.Container {
     const row = scene.add.container(0, y);
+    const palette = this.getPalette();
+    const displayFont = DS.getFontFamily('display');
+    const bodyFont = DS.getFontFamily('body');
 
     // Background for current user
     if (entry.isCurrentUser) {
-      const bg = scene.add.rectangle(0, 0, width - 40, 50, DS.hexToNumber('#667eea'), 0.1);
-      bg.setStrokeStyle(1, DS.hexToNumber('#667eea'), 0.3);
+      const highlightColor = DS.colorStringToNumber(palette.highlight);
+      const bg = scene.add.rectangle(0, 0, width - 40, 50, highlightColor, 0.1);
+      bg.setStrokeStyle(1, highlightColor, 0.3);
       row.add(bg);
     }
 
     // Rank badge
     const rankBg = scene.add.circle(-width / 2 + 50, 0, 18, 0x000000, 0);
     if (entry.rank <= 3) {
-      const colors = ['#ffd700', '#c0c0c0', '#cd7f32']; // Gold, Silver, Bronze
-      rankBg.setFillStyle(DS.hexToNumber(colors[entry.rank - 1]), 0.2);
-      rankBg.setStrokeStyle(2, DS.hexToNumber(colors[entry.rank - 1]), 0.8);
+      const colors = [palette.gold, palette.silver, palette.bronze];
+      const colorValue = DS.colorStringToNumber(colors[entry.rank - 1]);
+      rankBg.setFillStyle(colorValue, 0.2);
+      rankBg.setStrokeStyle(2, colorValue, 0.8);
     } else {
-      rankBg.setStrokeStyle(1, DS.hexToNumber('#444455'), 0.5);
+      rankBg.setStrokeStyle(1, DS.colorStringToNumber(palette.highlightBorder), 0.5);
     }
     row.add(rankBg);
 
     const rankText = scene.add.text(-width / 2 + 50, 0, entry.rank.toString(), {
-      fontSize: entry.rank <= 3 ? '18px' : '16px',
-      fontFamily: DS.TYPOGRAPHY.fontFamily.display,
+      fontSize: entry.rank <= 3 ? DS.getFontSize('lg') : DS.getFontSize('base'),
+      fontFamily: displayFont,
       fontStyle: '700 normal',
-      color: entry.rank <= 3 ? ['#ffd700', '#c0c0c0', '#cd7f32'][entry.rank - 1] : '#888888'
+      color: entry.rank <= 3
+        ? [palette.gold, palette.silver, palette.bronze][entry.rank - 1]
+        : palette.gray
     }).setOrigin(0.5);
     row.add(rankText);
 
     // Username
     const username = scene.add.text(-width / 2 + 100, 0, entry.username, {
-      fontSize: '16px',
-      fontFamily: DS.TYPOGRAPHY.fontFamily.body,
+      fontSize: DS.getFontSize('base'),
+      fontFamily: bodyFont,
       fontStyle: entry.isCurrentUser ? '600 normal' : '400 normal',
-      color: entry.isCurrentUser ? '#ffffff' : '#cccccc'
+      color: entry.isCurrentUser ? palette.textPrimary : palette.grayLighter
     }).setOrigin(0, 0.5);
     row.add(username);
 
     // Score with gradient for top 3
     const scoreColor = entry.rank <= 3 ?
-      ['#ffd700', '#c0c0c0', '#cd7f32'][entry.rank - 1] : '#888888';
+      [palette.gold, palette.silver, palette.bronze][entry.rank - 1] : palette.gray;
 
     const score = scene.add.text(width / 2 - 50, 0, entry.score.toLocaleString(), {
-      fontSize: '18px',
-      fontFamily: DS.TYPOGRAPHY.fontFamily.display,
+      fontSize: DS.getFontSize('lg'),
+      fontFamily: displayFont,
       fontStyle: '600 normal',
       color: scoreColor
     }).setOrigin(1, 0.5);
@@ -646,22 +662,24 @@ export class ModernLeaderboardUI extends Phaser.GameObjects.Container {
    */
   private createPlayerPositionDisplay(scene: Phaser.Scene, x: number, y: number, panelWidth: number): void {
     this.playerPositionContainer = scene.add.container(x, y);
+    const palette = this.getPalette();
+    const displayFont = DS.getFontFamily('display');
 
     // Background bar
     this.playerPositionBg = scene.add.rectangle(
       0, 0,
       panelWidth - 40, 60,
-      DS.hexToNumber('#2a2a3e'), 1
+      DS.colorStringToNumber(palette.closeBg), 1
     );
-    this.playerPositionBg.setStrokeStyle(1, DS.hexToNumber('#667eea'), 0.5);
+    this.playerPositionBg.setStrokeStyle(1, DS.colorStringToNumber(palette.panelBorder), 0.5);
     this.playerPositionContainer.add(this.playerPositionBg);
 
     // Player rank text
     this.playerPositionText = scene.add.text(0, 0, 'Your Rank: Calculating...', {
-      fontSize: '18px',
-      fontFamily: DS.TYPOGRAPHY.fontFamily.display,
+      fontSize: DS.getFontSize('lg'),
+      fontFamily: displayFont,
       fontStyle: '600 normal',
-      color: '#ffffff'
+      color: palette.textPrimary
     }).setOrigin(0.5);
     this.playerPositionContainer.add(this.playerPositionText);
 
@@ -676,6 +694,7 @@ export class ModernLeaderboardUI extends Phaser.GameObjects.Container {
       const { highScoreService } = await import('../../../services/HighScoreService');
       const currentUsername = highScoreService.getUsername();
       const currentScore = this.currentPlayerScore || 0;
+      const palette = this.getPalette();
 
       // Find player in entries
       const playerEntry = entries.find(e => e.username === currentUsername);
@@ -683,7 +702,7 @@ export class ModernLeaderboardUI extends Phaser.GameObjects.Container {
       if (playerEntry) {
         // Player is in the visible leaderboard
         this.playerPositionText.setText(`Your Rank: #${playerEntry.rank} • Score: ${playerEntry.score.toLocaleString()}`);
-        this.playerPositionText.setColor('#667eea');
+        this.playerPositionText.setColor(palette.highlight);
       } else if (currentScore > 0) {
         // Calculate rank based on score
         let calculatedRank = entries.length + 1;
@@ -696,22 +715,49 @@ export class ModernLeaderboardUI extends Phaser.GameObjects.Container {
 
         if (calculatedRank <= entries.length) {
           this.playerPositionText.setText(`Your Rank: #${calculatedRank} • Score: ${currentScore.toLocaleString()}`);
-          this.playerPositionText.setColor('#888888');
+          this.playerPositionText.setColor(palette.gray);
         } else {
           // Player is below all entries
           const estimatedRank = Math.floor(entries.length * 1.5 + Math.random() * 50);
           this.playerPositionText.setText(`Your Rank: ~#${estimatedRank} • Score: ${currentScore.toLocaleString()}`);
-          this.playerPositionText.setColor('#666666');
+          this.playerPositionText.setColor(palette.grayMuted);
         }
       } else {
         this.playerPositionText.setText('Play to get ranked!');
-        this.playerPositionText.setColor('#666666');
+        this.playerPositionText.setColor(palette.grayMuted);
       }
     } catch (error) {
       console.error('Failed to update player position:', error);
       this.playerPositionText.setText('Rank unavailable');
-      this.playerPositionText.setColor('#666666');
+      this.playerPositionText.setColor(palette.grayMuted);
     }
+  }
+
+  private getPalette() {
+    return {
+      overlay: DS.getColor('solid', 'bgPrimary'),
+      panelBackground: DS.getColor('accents', 'indigoSurface'),
+      panelBorder: DS.getColor('accents', 'indigo'),
+      textPrimary: DS.getColor('solid', 'textPrimary'),
+      textMuted: DS.getColor('accents', 'gray'),
+      textSubtle: DS.getColor('accents', 'grayMuted'),
+      textSecondary: DS.getColor('accents', 'grayLight'),
+      closeBg: DS.getColor('accents', 'indigoSurface'),
+      closeBgHover: DS.getColor('accents', 'indigoSurfaceHover'),
+      closeText: DS.getColor('accents', 'gray'),
+      highlight: DS.getColor('accents', 'indigo'),
+      highlightSurface: DS.getColor('accents', 'indigoSurface'),
+      highlightHover: DS.getColor('accents', 'indigoSurfaceHover'),
+      highlightBorder: DS.getColor('accents', 'indigoSurfaceBorder'),
+      gold: DS.getColor('accents', 'gold'),
+      silver: DS.getColor('accents', 'silver'),
+      bronze: DS.getColor('accents', 'bronze'),
+      gray: DS.getColor('accents', 'gray'),
+      grayLight: DS.getColor('accents', 'grayLight'),
+      grayLighter: DS.getColor('accents', 'grayLighter'),
+      grayMuted: DS.getColor('accents', 'grayMuted'),
+      blueSoft: DS.getColor('accents', 'blueSoft'),
+    };
   }
 
   /**

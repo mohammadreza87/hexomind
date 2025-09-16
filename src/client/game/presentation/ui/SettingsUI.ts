@@ -31,10 +31,45 @@ export class SettingsUI extends Phaser.GameObjects.Container {
 
     const { width, height } = scene.cameras.main;
 
+    const spacing = {
+      xl: DS.getSpacingValue('xl'),
+      lg: DS.getSpacingValue('lg'),
+      md: DS.getSpacingValue('md'),
+      base: DS.getSpacingValue('sm'),
+    };
+
+    const palette = {
+      overlay: DS.getColor('solid', 'bgPrimary'),
+      panelBackground: DS.getColor('accents', 'indigoSurface'),
+      panelBorder: DS.getColor('accents', 'indigo'),
+      title: DS.getColor('solid', 'textPrimary'),
+      closeBg: DS.getColor('accents', 'indigoSurface'),
+      closeBgHover: DS.getColor('accents', 'indigoSurfaceHover'),
+      closeText: DS.getColor('accents', 'gray'),
+      sectionLabel: DS.getColor('accents', 'gray'),
+      usernameCustom: DS.getColor('accents', 'indigo'),
+      usernameDefault: DS.getColor('accents', 'grayLight'),
+      redditLabel: DS.getColor('accents', 'grayMuted'),
+      inputBg: DS.getColor('accents', 'indigoSurface'),
+      inputBorder: DS.getColor('accents', 'indigo'),
+      buttonPrimary: DS.getColor('accents', 'indigo'),
+      buttonDanger: DS.getColor('accents', 'crimson'),
+      buttonSuccess: DS.getColor('accents', 'mint'),
+      statusDanger: DS.getColor('accents', 'crimson'),
+      statusSuccess: DS.getColor('accents', 'mint'),
+      statusWarning: DS.getColor('accents', 'amber'),
+    };
+
+    const fonts = {
+      display: DS.getFontFamily('display'),
+      displayBlack: DS.getFontFamily('displayBlack'),
+      body: DS.getFontFamily('body'),
+    };
+
     // Dark overlay background
     this.background = scene.add.rectangle(
       width / 2, height / 2, width, height,
-      0x000000, 0.8
+      DS.colorStringToNumber(palette.overlay), 0.8
     );
     this.background.setInteractive();
     this.add(this.background);
@@ -46,20 +81,20 @@ export class SettingsUI extends Phaser.GameObjects.Container {
     this.panel = scene.add.rectangle(
       width / 2, height / 2,
       panelWidth, panelHeight,
-      DS.hexToNumber('#1a1a2e'), 1
+      DS.colorStringToNumber(palette.panelBackground), 1
     );
-    this.panel.setStrokeStyle(2, DS.hexToNumber('#667eea'), 0.3);
+    this.panel.setStrokeStyle(2, DS.colorStringToNumber(palette.panelBorder), 0.3);
     this.add(this.panel);
 
     // Title
     this.titleText = scene.add.text(
-      width / 2, height / 2 - panelHeight / 2 + 40,
+      width / 2, height / 2 - panelHeight / 2 + spacing.xl + spacing.base,
       'SETTINGS',
       {
-        fontSize: '28px',
-        fontFamily: DS.TYPOGRAPHY.fontFamily.displayBlack,
+        fontSize: DS.getFontSize('xl'),
+        fontFamily: fonts.displayBlack,
         fontStyle: '900 normal',
-        color: '#ffffff'
+        color: palette.title
       }
     ).setOrigin(0.5);
     this.add(this.titleText);
@@ -77,7 +112,7 @@ export class SettingsUI extends Phaser.GameObjects.Container {
       width / 2,
       height / 2 + 20,
       '🏆 LEADERBOARD',
-      DS.hexToNumber('#667eea'),
+      DS.getColor('accents', 'indigo'),
       () => {
         this.hide();
         this.emit('showLeaderboard');
@@ -91,7 +126,7 @@ export class SettingsUI extends Phaser.GameObjects.Container {
       width / 2,
       height / 2 + 80,
       '🔄 RESET GAME',
-      DS.hexToNumber('#dc2626'),
+      DS.getColor('accents', 'crimson'),
       () => {
         this.confirmReset(scene);
       }
@@ -110,27 +145,27 @@ export class SettingsUI extends Phaser.GameObjects.Container {
   private createCloseButton(scene: Phaser.Scene, x: number, y: number): void {
     this.closeButton = scene.add.container(x, y);
 
-    const bg = scene.add.circle(0, 0, 20, DS.hexToNumber('#2a2a3e'), 1);
-    bg.setStrokeStyle(1, DS.hexToNumber('#667eea'), 0.3);
+    const bg = scene.add.circle(0, 0, 20, DS.colorStringToNumber(DS.getColor('accents', 'indigoSurface')), 1);
+    bg.setStrokeStyle(1, DS.colorStringToNumber(DS.getColor('accents', 'indigo')), 0.3);
     bg.setInteractive();
 
     const closeX = scene.add.text(0, 0, '✕', {
-      fontSize: '20px',
-      fontFamily: DS.TYPOGRAPHY.fontFamily.body,
-      color: '#888888'
+      fontSize: DS.getFontSize('lg'),
+      fontFamily: DS.getFontFamily('body'),
+      color: DS.getColor('accents', 'gray')
     }).setOrigin(0.5);
 
     this.closeButton.add([bg, closeX]);
 
     bg.on('pointerover', () => {
-      bg.setFillStyle(DS.hexToNumber('#3a3a4e'));
-      closeX.setColor('#ffffff');
+      bg.setFillStyle(DS.colorStringToNumber(DS.getColor('accents', 'indigoSurfaceHover')));
+      closeX.setColor(DS.getColor('solid', 'textPrimary'));
       scene.input.setDefaultCursor('pointer');
     });
 
     bg.on('pointerout', () => {
-      bg.setFillStyle(DS.hexToNumber('#2a2a3e'));
-      closeX.setColor('#888888');
+      bg.setFillStyle(DS.colorStringToNumber(DS.getColor('accents', 'indigoSurface')));
+      closeX.setColor(DS.getColor('accents', 'gray'));
       scene.input.setDefaultCursor('default');
     });
 
@@ -145,10 +180,10 @@ export class SettingsUI extends Phaser.GameObjects.Container {
   private createUsernameSection(scene: Phaser.Scene, x: number, y: number, panelWidth: number): void {
     // Section title
     const sectionTitle = scene.add.text(x, y, 'USERNAME', {
-      fontSize: '14px',
-      fontFamily: DS.TYPOGRAPHY.fontFamily.display,
+      fontSize: DS.getFontSize('sm'),
+      fontFamily: DS.getFontFamily('display'),
       fontStyle: '600 normal',
-      color: '#888888'
+      color: DS.getColor('accents', 'gray')
     }).setOrigin(0.5);
     this.add(sectionTitle);
 
@@ -157,19 +192,19 @@ export class SettingsUI extends Phaser.GameObjects.Container {
     const isCustom = highScoreService.hasCustomUsername();
 
     this.currentUsernameText = scene.add.text(x, y + 30, currentUsername, {
-      fontSize: '20px',
-      fontFamily: DS.TYPOGRAPHY.fontFamily.display,
+      fontSize: DS.getFontSize('lg'),
+      fontFamily: DS.getFontFamily('display'),
       fontStyle: '700 normal',
-      color: isCustom ? '#667eea' : '#aaaaaa'
+      color: isCustom ? DS.getColor('accents', 'indigo') : DS.getColor('accents', 'grayLight')
     }).setOrigin(0.5);
     this.add(this.currentUsernameText);
 
     // Reddit username indicator
     if (!isCustom) {
       const redditLabel = scene.add.text(x, y + 55, '(Reddit Username)', {
-        fontSize: '12px',
-        fontFamily: DS.TYPOGRAPHY.fontFamily.body,
-        color: '#666666'
+        fontSize: DS.getFontSize('sm'),
+        fontFamily: DS.getFontFamily('body'),
+        color: DS.getColor('accents', 'grayMuted')
       }).setOrigin(0.5);
       this.add(redditLabel);
     }
@@ -178,25 +213,25 @@ export class SettingsUI extends Phaser.GameObjects.Container {
     this.usernameInputBg = scene.add.rectangle(
       x, y + 90,
       panelWidth - 80, 40,
-      DS.hexToNumber('#2a2a3e'), 1
+      DS.colorStringToNumber(DS.getColor('accents', 'indigoSurface')), 1
     );
-    this.usernameInputBg.setStrokeStyle(2, DS.hexToNumber('#667eea'), 0.5);
+    this.usernameInputBg.setStrokeStyle(2, DS.colorStringToNumber(DS.getColor('accents', 'indigo')), 0.5);
     this.usernameInputBg.setVisible(false);
     this.add(this.usernameInputBg);
 
     this.usernameInput = scene.add.text(x, y + 90, '', {
-      fontSize: '16px',
-      fontFamily: DS.TYPOGRAPHY.fontFamily.body,
-      color: '#ffffff'
+      fontSize: DS.getFontSize('base'),
+      fontFamily: DS.getFontFamily('body'),
+      color: DS.getColor('solid', 'textPrimary')
     }).setOrigin(0.5);
     this.usernameInput.setVisible(false);
     this.add(this.usernameInput);
 
     // Status text
     this.usernameStatusText = scene.add.text(x, y + 130, '', {
-      fontSize: '12px',
-      fontFamily: DS.TYPOGRAPHY.fontFamily.body,
-      color: '#666666'
+      fontSize: DS.getFontSize('sm'),
+      fontFamily: DS.getFontFamily('body'),
+      color: DS.getColor('accents', 'grayMuted')
     }).setOrigin(0.5).setVisible(false);
     this.add(this.usernameStatusText);
 
@@ -204,7 +239,7 @@ export class SettingsUI extends Phaser.GameObjects.Container {
     this.changeUsernameButton = this.createActionButton(
       scene, x, y + 90,
       isCustom ? 'CHANGE USERNAME' : 'SET CUSTOM USERNAME',
-      DS.hexToNumber('#10b981'),
+      DS.getColor('accents', 'mint'),
       () => this.toggleUsernameEdit(scene)
     );
     this.add(this.changeUsernameButton);
@@ -218,7 +253,7 @@ export class SettingsUI extends Phaser.GameObjects.Container {
     x: number,
     y: number,
     text: string,
-    color: number,
+    color: string,
     onClick: () => void
   ): Phaser.GameObjects.Container {
     const button = scene.add.container(x, y);
@@ -226,15 +261,16 @@ export class SettingsUI extends Phaser.GameObjects.Container {
     const buttonWidth = 260;
     const buttonHeight = 45;
 
-    const bg = scene.add.rectangle(0, 0, buttonWidth, buttonHeight, color, 0.9);
-    bg.setStrokeStyle(1, color, 0.3);
+    const fillColor = DS.colorStringToNumber(color);
+    const bg = scene.add.rectangle(0, 0, buttonWidth, buttonHeight, fillColor, 0.9);
+    bg.setStrokeStyle(1, fillColor, 0.3);
     bg.setInteractive();
 
     const label = scene.add.text(0, 0, text, {
-      fontSize: '16px',
-      fontFamily: DS.TYPOGRAPHY.fontFamily.display,
+      fontSize: DS.getFontSize('base'),
+      fontFamily: DS.getFontFamily('display'),
       fontStyle: '600 normal',
-      color: '#ffffff'
+      color: DS.getColor('solid', 'textPrimary')
     }).setOrigin(0.5);
 
     button.add([bg, label]);
@@ -268,20 +304,20 @@ export class SettingsUI extends Phaser.GameObjects.Container {
       this.usernameInputBg.setVisible(true);
       this.usernameInput.setVisible(true);
       this.usernameInput.setText('Enter new username...');
-      this.usernameInput.setColor('#666666');
+      this.usernameInput.setColor(DS.getColor('accents', 'grayMuted'));
 
       // Update button
       const bg = this.changeUsernameButton.getData('bg') as Phaser.GameObjects.Rectangle;
       const label = this.changeUsernameButton.getData('label') as Phaser.GameObjects.Text;
       label.setText('SAVE USERNAME');
-      bg.setFillStyle(DS.hexToNumber('#667eea'));
+      bg.setFillStyle(DS.colorStringToNumber(DS.getColor('accents', 'indigo')));
 
       // Setup keyboard input
       this.setupKeyboardInput(scene);
 
       // Show status
       this.usernameStatusText.setText('3-20 characters, letters/numbers/underscore only');
-      this.usernameStatusText.setColor('#666666');
+      this.usernameStatusText.setColor(DS.getColor('accents', 'grayMuted'));
       this.usernameStatusText.setVisible(true);
     } else {
       // Save username
@@ -323,10 +359,10 @@ export class SettingsUI extends Phaser.GameObjects.Container {
       // Update display
       if (this.pendingUsername.length > 0) {
         this.usernameInput.setText(this.pendingUsername);
-        this.usernameInput.setColor('#ffffff');
+        this.usernameInput.setColor(DS.getColor('solid', 'textPrimary'));
       } else {
         this.usernameInput.setText('Enter new username...');
-        this.usernameInput.setColor('#666666');
+        this.usernameInput.setColor(DS.getColor('accents', 'grayMuted'));
       }
 
       // Validate
@@ -342,24 +378,24 @@ export class SettingsUI extends Phaser.GameObjects.Container {
 
     if (username.length < 3) {
       this.usernameStatusText.setText('Username too short (min 3 characters)');
-      this.usernameStatusText.setColor('#dc2626');
+      this.usernameStatusText.setColor(DS.getColor('accents', 'crimson'));
       return;
     }
 
     if (username.length > 20) {
       this.usernameStatusText.setText('Username too long (max 20 characters)');
-      this.usernameStatusText.setColor('#dc2626');
+      this.usernameStatusText.setColor(DS.getColor('accents', 'crimson'));
       return;
     }
 
     if (!/^[a-zA-Z0-9_]+$/.test(username)) {
       this.usernameStatusText.setText('Only letters, numbers, and underscore allowed');
-      this.usernameStatusText.setColor('#dc2626');
+      this.usernameStatusText.setColor(DS.getColor('accents', 'crimson'));
       return;
     }
 
     this.usernameStatusText.setText('✓ Valid username');
-    this.usernameStatusText.setColor('#10b981');
+    this.usernameStatusText.setColor(DS.getColor('accents', 'mint'));
   }
 
   /**
@@ -376,7 +412,7 @@ export class SettingsUI extends Phaser.GameObjects.Container {
 
     // Check uniqueness
     this.usernameStatusText.setText('Checking availability...');
-    this.usernameStatusText.setColor('#f59e0b');
+    this.usernameStatusText.setColor(DS.getColor('accents', 'amber'));
 
     try {
       // Check if username is available
@@ -395,14 +431,14 @@ export class SettingsUI extends Phaser.GameObjects.Container {
 
           // Update display
           this.currentUsernameText.setText(username);
-          this.currentUsernameText.setColor('#667eea');
+          this.currentUsernameText.setColor(DS.getColor('accents', 'indigo'));
 
           // Exit edit mode
           this.cancelUsernameEdit();
 
           // Show success
           this.usernameStatusText.setText('✓ Username saved!');
-          this.usernameStatusText.setColor('#10b981');
+          this.usernameStatusText.setColor(DS.getColor('accents', 'mint'));
           this.usernameStatusText.setVisible(true);
 
           // Hide status after 2 seconds
@@ -411,7 +447,7 @@ export class SettingsUI extends Phaser.GameObjects.Container {
           });
         } else {
           this.usernameStatusText.setText('Username already taken');
-          this.usernameStatusText.setColor('#dc2626');
+          this.usernameStatusText.setColor(DS.getColor('accents', 'crimson'));
         }
       } else {
         throw new Error('Failed to check username');
@@ -421,11 +457,11 @@ export class SettingsUI extends Phaser.GameObjects.Container {
       // Allow setting username offline
       highScoreService.setCustomUsername(username);
       this.currentUsernameText.setText(username);
-      this.currentUsernameText.setColor('#667eea');
+      this.currentUsernameText.setColor(DS.getColor('accents', 'indigo'));
       this.cancelUsernameEdit();
 
       this.usernameStatusText.setText('✓ Username saved locally');
-      this.usernameStatusText.setColor('#f59e0b');
+      this.usernameStatusText.setColor(DS.getColor('accents', 'amber'));
       this.usernameStatusText.setVisible(true);
 
       this.scene.time.delayedCall(2000, () => {
@@ -448,7 +484,7 @@ export class SettingsUI extends Phaser.GameObjects.Container {
     const bg = this.changeUsernameButton.getData('bg') as Phaser.GameObjects.Rectangle;
     const label = this.changeUsernameButton.getData('label') as Phaser.GameObjects.Text;
     label.setText(highScoreService.hasCustomUsername() ? 'CHANGE USERNAME' : 'SET CUSTOM USERNAME');
-    bg.setFillStyle(DS.hexToNumber('#10b981'));
+    bg.setFillStyle(DS.colorStringToNumber(DS.getColor('accents', 'mint')));
 
     // Clear keyboard listeners
     this.scene.input.keyboard?.removeAllListeners();
@@ -463,9 +499,9 @@ export class SettingsUI extends Phaser.GameObjects.Container {
       scene.cameras.main.height / 2 + 140,
       'Are you sure? This will reset your progress!',
       {
-        fontSize: '14px',
-        fontFamily: DS.TYPOGRAPHY.fontFamily.body,
-        color: '#dc2626'
+        fontSize: DS.getFontSize('sm'),
+        fontFamily: DS.getFontFamily('body'),
+        color: DS.getColor('accents', 'crimson')
       }
     ).setOrigin(0.5);
     this.add(confirmText);

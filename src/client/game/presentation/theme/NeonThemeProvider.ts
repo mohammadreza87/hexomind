@@ -3,6 +3,7 @@
  */
 
 import { ColorSystem } from '../../core/colors/ColorSystem';
+import { DesignSystem } from '../../config/DesignSystem';
 
 export class NeonThemeProvider {
   private colorSystem: ColorSystem;
@@ -120,6 +121,7 @@ export class NeonThemeProvider {
    */
   toggleTheme(): void {
     this.colorSystem.toggleMode();
+    DesignSystem.applyCssVariables();
     this.notifyListeners();
   }
 
@@ -130,6 +132,7 @@ export class NeonThemeProvider {
     try {
       const colors = await this.colorSystem.generatePaletteFromColormind('default');
       this.colorSystem.applyCustomPalette(colors);
+      DesignSystem.applyCssVariables();
       this.notifyListeners();
     } catch (error) {
       console.error('Failed to load custom palette:', error);

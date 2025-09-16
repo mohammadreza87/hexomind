@@ -20,13 +20,45 @@ export class LeaderboardUI extends Phaser.GameObjects.Container {
 
     const { width, height } = scene.cameras.main;
 
+    const spacing = {
+      xl: DS.getSpacingValue('xl'),
+      xxl: DS.getSpacingValue('xxl'),
+      sm: DS.getSpacingValue('sm'),
+      xs: DS.getSpacingValue('xs'),
+    };
+
+    const palette = {
+      overlay: DS.getColor('solid', 'bgPrimary'),
+      panel: DS.getColor('solid', 'bgElevated'),
+      border: DS.getColor('glass', 'border'),
+      warning: DS.getColor('solid', 'warning'),
+      textPrimary: DS.getColor('solid', 'textPrimary'),
+      textMuted: DS.getColor('solid', 'textMuted'),
+      toggleText: DS.getColor('accents', 'teal'),
+      toggleBackground: DS.getColor('accents', 'midnight'),
+      close: DS.getColor('accents', 'coral'),
+      highlight: DS.getColor('accents', 'teal'),
+      highlightSecondary: DS.getColor('accents', 'grayLighter'),
+      separator: DS.getColor('accents', 'grayMuted'),
+    };
+
+    const typography = {
+      displayBlack: DS.getFontFamily('displayBlack'),
+      mono: DS.getFontFamily('mono'),
+    };
+
+    const togglePaddingX = spacing.sm + spacing.xs / 2;
+    const togglePaddingY = spacing.xs + spacing.xs / 4;
+    const closePadding = spacing.xs + spacing.xs / 4;
+    const toggleOffsetY = spacing.xxl + spacing.sm + spacing.xs * 2;
+
     // Semi-transparent background overlay with modern blur
     this.background = scene.add.rectangle(
       width / 2,
       height / 2,
       width,
       height,
-      DS.hexToNumber(DS.COLORS.solid.bgPrimary),
+      DS.colorStringToNumber(palette.overlay),
       0.85
     );
     this.background.setInteractive();
@@ -40,22 +72,22 @@ export class LeaderboardUI extends Phaser.GameObjects.Container {
       height / 2,
       panelWidth,
       panelHeight,
-      DS.hexToNumber(DS.COLORS.solid.bgElevated),
+      DS.colorStringToNumber(palette.panel),
       0.95
     );
-    panel.setStrokeStyle(1, DS.hexToNumber(DS.COLORS.glass.border));
+    panel.setStrokeStyle(1, DS.colorStringToNumber(palette.border));
     this.add(panel);
 
     // Title with Inter Black font
     this.titleText = scene.add.text(
       width / 2,
-      height / 2 - panelHeight / 2 + DS.SPACING.xl,
+      height / 2 - panelHeight / 2 + spacing.xl,
       'LEADERBOARD',
       {
-        fontSize: DS.TYPOGRAPHY.fontSize['2xl'],
-        fontFamily: DS.TYPOGRAPHY.fontFamily.displayBlack,
+        fontSize: DS.getFontSize('2xl'),
+        fontFamily: typography.displayBlack,
         fontStyle: '900 normal', // Inter Black
-        color: DS.COLORS.solid.warning,
+        color: palette.warning,
         align: 'center'
       }
     ).setOrigin(0.5);
@@ -64,14 +96,14 @@ export class LeaderboardUI extends Phaser.GameObjects.Container {
     // Type toggle button
     this.typeToggle = scene.add.text(
       width / 2,
-      height / 2 - panelHeight / 2 + 65,
+      height / 2 - panelHeight / 2 + toggleOffsetY,
       'Global Rankings',
       {
-        fontSize: '16px',
-        fontFamily: 'monospace',
-        color: '#4ECDC4',
-        backgroundColor: '#0f0f1e',
-        padding: { x: 10, y: 5 }
+        fontSize: DS.getFontSize('base'),
+        fontFamily: typography.mono,
+        color: palette.toggleText,
+        backgroundColor: palette.toggleBackground,
+        padding: { x: togglePaddingX, y: togglePaddingY }
       }
     ).setOrigin(0.5).setInteractive();
 
@@ -96,9 +128,9 @@ export class LeaderboardUI extends Phaser.GameObjects.Container {
       height / 2,
       'Loading...',
       {
-        fontSize: '20px',
-        fontFamily: 'monospace',
-        color: '#FFFFFF'
+        fontSize: DS.getFontSize('lg'),
+        fontFamily: typography.mono,
+        color: palette.textPrimary
       }
     ).setOrigin(0.5).setVisible(false);
     this.add(this.loadingText);
@@ -109,10 +141,10 @@ export class LeaderboardUI extends Phaser.GameObjects.Container {
       height / 2 - panelHeight / 2 + 20,
       '✕',
       {
-        fontSize: '24px',
-        fontFamily: 'monospace',
-        color: '#FF6B6B',
-        padding: { x: 5, y: 5 }
+        fontSize: DS.getFontSize('xl'),
+        fontFamily: typography.mono,
+        color: palette.close,
+        padding: { x: closePadding, y: closePadding }
       }
     ).setOrigin(0.5).setInteractive();
 
@@ -194,6 +226,15 @@ export class LeaderboardUI extends Phaser.GameObjects.Container {
     this.entriesContainer.removeAll(true);
     this.loadingText.setVisible(true);
 
+    const spacingXl = DS.getSpacingValue('xl');
+    const spacingXxl = DS.getSpacingValue('xxl');
+    const spacingXs = DS.getSpacingValue('xs');
+    const monoFont = DS.getFontFamily('mono');
+    const highlightColor = DS.getColor('accents', 'teal');
+    const textPrimary = DS.getColor('solid', 'textPrimary');
+    const separatorColor = DS.getColor('accents', 'grayMuted');
+    const errorColor = DS.getColor('accents', 'coral');
+
     try {
       const entries = await highScoreService.getLeaderboard(this.currentType, 10);
       this.loadingText.setVisible(false);
@@ -204,7 +245,7 @@ export class LeaderboardUI extends Phaser.GameObjects.Container {
           0,
           'No scores yet. Be the first!',
           DS.getTextStyle('body', {
-            color: DS.COLORS.solid.textMuted
+            color: DS.getColor('solid', 'textMuted')
           })
         ).setOrigin(0.5);
         this.entriesContainer.add(noDataText);
@@ -212,13 +253,13 @@ export class LeaderboardUI extends Phaser.GameObjects.Container {
       }
 
       // Display entries
-      const startY = -120;
-      const spacing = 35;
+      const startY = -(spacingXxl * 2 + spacingXl / 2);
+      const entrySpacing = spacingXl + spacingXs;
       const currentUser = highScoreService.getUsername();
 
       entries.forEach((entry, index) => {
         const isCurrentUser = entry.username === currentUser;
-        const yPos = startY + index * spacing;
+        const yPos = startY + index * entrySpacing;
 
         // Rank
         const rankText = this.scene.add.text(
@@ -226,8 +267,8 @@ export class LeaderboardUI extends Phaser.GameObjects.Container {
           yPos,
           `#${entry.rank}`,
           {
-            fontSize: '18px',
-            fontFamily: 'monospace',
+            fontSize: DS.getFontSize('lg'),
+            fontFamily: monoFont,
             fontStyle: entry.rank <= 3 ? 'bold' : 'normal',
             color: this.getRankColor(entry.rank)
           }
@@ -239,10 +280,10 @@ export class LeaderboardUI extends Phaser.GameObjects.Container {
           yPos,
           entry.username.substring(0, 15),
           {
-            fontSize: '16px',
-            fontFamily: 'monospace',
+            fontSize: DS.getFontSize('base'),
+            fontFamily: monoFont,
             fontStyle: isCurrentUser ? 'bold' : 'normal',
-            color: isCurrentUser ? '#4ECDC4' : '#FFFFFF'
+            color: isCurrentUser ? highlightColor : textPrimary
           }
         ).setOrigin(0, 0.5);
 
@@ -252,10 +293,10 @@ export class LeaderboardUI extends Phaser.GameObjects.Container {
           yPos,
           entry.score.toLocaleString(),
           {
-            fontSize: '18px',
-            fontFamily: 'monospace',
+            fontSize: DS.getFontSize('lg'),
+            fontFamily: monoFont,
             fontStyle: 'bold',
-            color: '#FFD700'
+            color: DS.getColor('accents', 'gold')
           }
         ).setOrigin(1, 0.5);
 
@@ -266,10 +307,11 @@ export class LeaderboardUI extends Phaser.GameObjects.Container {
             yPos,
             300,
             30,
-            0x4ECDC4,
+            DS.colorStringToNumber(highlightColor),
             0.1
           );
-          highlight.setStrokeStyle(1, 0x4ECDC4, 0.3);
+          const highlightStroke = DS.colorStringToNumber(highlightColor);
+          highlight.setStrokeStyle(1, highlightStroke, 0.3);
           this.entriesContainer.add(highlight);
         }
 
@@ -281,24 +323,24 @@ export class LeaderboardUI extends Phaser.GameObjects.Container {
       if (userRank && userRank > 10) {
         const separator = this.scene.add.text(
           0,
-          startY + entries.length * spacing + 10,
+          startY + entries.length * entrySpacing + spacingXs * 2.5,
           '···',
           {
-            fontSize: '16px',
-            fontFamily: 'monospace',
-            color: '#666666'
+            fontSize: DS.getFontSize('base'),
+            fontFamily: monoFont,
+            color: separatorColor
           }
         ).setOrigin(0.5);
 
         const userEntry = this.scene.add.text(
           0,
-          startY + entries.length * spacing + 40,
+          startY + entries.length * entrySpacing + spacingXl,
           `Your Rank: #${userRank}`,
           {
-            fontSize: '16px',
-            fontFamily: 'monospace',
+            fontSize: DS.getFontSize('base'),
+            fontFamily: monoFont,
             fontStyle: 'bold',
-            color: '#4ECDC4'
+            color: highlightColor
           }
         ).setOrigin(0.5);
 
@@ -307,7 +349,7 @@ export class LeaderboardUI extends Phaser.GameObjects.Container {
     } catch (error) {
       console.error('Failed to load leaderboard:', error);
       this.loadingText.setText('Failed to load scores');
-      this.loadingText.setColor('#FF6B6B');
+      this.loadingText.setColor(errorColor);
     }
   }
 
@@ -316,10 +358,14 @@ export class LeaderboardUI extends Phaser.GameObjects.Container {
    */
   private getRankColor(rank: number): string {
     switch (rank) {
-      case 1: return '#f5af19'; // Gold gradient start
-      case 2: return '#b8b8b8'; // Silver
-      case 3: return '#cd7f32'; // Bronze
-      default: return DS.COLORS.solid.textPrimary;
+      case 1:
+        return DS.getColor('accents', 'gold');
+      case 2:
+        return DS.getColor('accents', 'silver');
+      case 3:
+        return DS.getColor('accents', 'bronze');
+      default:
+        return DS.getColor('solid', 'textPrimary');
     }
   }
 
