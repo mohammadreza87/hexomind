@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import { DS } from '../../config/DesignSystem';
+import { UIComponent } from './components/UIComponent';
 
 interface LeaderboardEntry {
   rank: number;
@@ -13,7 +13,7 @@ type LeaderboardType = 'daily' | 'weekly' | 'allTime';
 /**
  * Modern Leaderboard UI with tabs, animations, and beautiful design
  */
-export class ModernLeaderboardUI extends Phaser.GameObjects.Container {
+export class ModernLeaderboardUI extends UIComponent {
   private background: Phaser.GameObjects.Rectangle;
   private panel: Phaser.GameObjects.Rectangle;
   private titleText: Phaser.GameObjects.Text;
@@ -47,18 +47,18 @@ export class ModernLeaderboardUI extends Phaser.GameObjects.Container {
   private maxScrollY: number = 0;
 
   constructor(scene: Phaser.Scene) {
-    super(scene, 0, 0);
+    super(scene, { visible: false });
 
     const { width, height } = scene.cameras.main;
 
     const palette = this.getPalette();
-    const displayFont = DS.getFontFamily('display');
-    const bodyFont = DS.getFontFamily('body');
+    const displayFont = this.getFontFamily('display');
+    const bodyFont = this.getFontFamily('body');
 
     // Dark overlay background
     this.background = scene.add.rectangle(
       width / 2, height / 2, width, height,
-      DS.colorStringToNumber(palette.overlay), 0.8
+      this.colorToNumber(palette.overlay), 0.8
     );
     this.background.setInteractive();
     this.add(this.background);
@@ -70,9 +70,9 @@ export class ModernLeaderboardUI extends Phaser.GameObjects.Container {
     this.panel = scene.add.rectangle(
       width / 2, height / 2,
       panelWidth, panelHeight,
-      DS.colorStringToNumber(palette.panelBackground), 1
+      this.colorToNumber(palette.panelBackground), 1
     );
-    this.panel.setStrokeStyle(2, DS.colorStringToNumber(palette.panelBorder), 0.3);
+    this.panel.setStrokeStyle(2, this.colorToNumber(palette.panelBorder), 0.3);
     this.add(this.panel);
 
     // Title with gradient effect
@@ -80,7 +80,7 @@ export class ModernLeaderboardUI extends Phaser.GameObjects.Container {
       width / 2, height / 2 - panelHeight / 2 + 40,
       'LEADERBOARD',
       {
-        fontSize: DS.getFontSize('2xl'),
+        fontSize: this.getFontSize('2xl'),
         fontFamily: displayFont,
         fontStyle: '900 normal',
         color: palette.textPrimary
@@ -125,7 +125,7 @@ export class ModernLeaderboardUI extends Phaser.GameObjects.Container {
 
     // Loading indicator
     this.loadingText = scene.add.text(0, 0, 'Loading...', {
-      fontSize: DS.getFontSize('lg'),
+      fontSize: this.getFontSize('lg'),
       fontFamily: bodyFont,
       color: palette.gray
     }).setOrigin(0.5).setVisible(false);
@@ -133,7 +133,7 @@ export class ModernLeaderboardUI extends Phaser.GameObjects.Container {
 
     // Empty state
     this.emptyText = scene.add.text(0, 0, 'No scores yet.\nBe the first!', {
-      fontSize: DS.getFontSize('lg'),
+      fontSize: this.getFontSize('lg'),
       fontFamily: bodyFont,
       color: palette.grayMuted,
       align: 'center'
@@ -144,9 +144,8 @@ export class ModernLeaderboardUI extends Phaser.GameObjects.Container {
     this.createPlayerPositionDisplay(scene, width / 2, height / 2 + panelHeight / 2 - 50, panelWidth);
 
     // Initialize
-    this.setDepth(DS.LAYERS.modal);
+    this.setDepth(this.layers.modal);
     this.setVisible(false);
-    scene.add.existing(this);
   }
 
   /**
@@ -156,26 +155,26 @@ export class ModernLeaderboardUI extends Phaser.GameObjects.Container {
     this.closeButton = scene.add.container(x, y);
 
     const palette = this.getPalette();
-    const bg = scene.add.circle(0, 0, 20, DS.colorStringToNumber(palette.closeBg), 1);
-    bg.setStrokeStyle(1, DS.colorStringToNumber(palette.panelBorder), 0.3);
+    const bg = scene.add.circle(0, 0, 20, this.colorToNumber(palette.closeBg), 1);
+    bg.setStrokeStyle(1, this.colorToNumber(palette.panelBorder), 0.3);
     bg.setInteractive();
 
     const closeX = scene.add.text(0, 0, '✕', {
-      fontSize: DS.getFontSize('lg'),
-      fontFamily: DS.getFontFamily('body'),
+      fontSize: this.getFontSize('lg'),
+      fontFamily: this.getFontFamily('body'),
       color: palette.closeText
     }).setOrigin(0.5);
 
     this.closeButton.add([bg, closeX]);
 
     bg.on('pointerover', () => {
-      bg.setFillStyle(DS.colorStringToNumber(palette.closeBgHover));
+      bg.setFillStyle(this.colorToNumber(palette.closeBgHover));
       closeX.setColor(palette.textPrimary);
       scene.input.setDefaultCursor('pointer');
     });
 
     bg.on('pointerout', () => {
-      bg.setFillStyle(DS.colorStringToNumber(palette.closeBg));
+      bg.setFillStyle(this.colorToNumber(palette.closeBg));
       closeX.setColor(palette.closeText);
       scene.input.setDefaultCursor('default');
     });
@@ -199,7 +198,7 @@ export class ModernLeaderboardUI extends Phaser.GameObjects.Container {
     this.tabIndicator = scene.add.rectangle(
       -tabWidth - 10, tabHeight / 2 + 5,
       tabWidth - 20, 3,
-      DS.colorStringToNumber(palette.highlight), 1
+      this.colorToNumber(palette.highlight), 1
     );
     this.tabContainer.add(this.tabIndicator);
 
@@ -234,13 +233,13 @@ export class ModernLeaderboardUI extends Phaser.GameObjects.Container {
   ): Phaser.GameObjects.Container {
     const tab = scene.add.container(x, y);
     const palette = this.getPalette();
-    const displayFont = DS.getFontFamily('display');
+    const displayFont = this.getFontFamily('display');
 
     const bg = scene.add.rectangle(0, 0, width - 20, 35, 0x000000, 0);
     bg.setInteractive();
 
     const text = scene.add.text(0, 0, label, {
-      fontSize: DS.getFontSize('sm'),
+      fontSize: this.getFontSize('sm'),
       fontFamily: displayFont,
       fontStyle: '700 normal',
       color: type === this.activeTab ? palette.textPrimary : palette.grayMuted
@@ -323,12 +322,12 @@ export class ModernLeaderboardUI extends Phaser.GameObjects.Container {
   ): Phaser.GameObjects.Container {
     const row = scene.add.container(0, y);
     const palette = this.getPalette();
-    const displayFont = DS.getFontFamily('display');
-    const bodyFont = DS.getFontFamily('body');
+    const displayFont = this.getFontFamily('display');
+    const bodyFont = this.getFontFamily('body');
 
     // Background for current user
     if (entry.isCurrentUser) {
-      const highlightColor = DS.colorStringToNumber(palette.highlight);
+      const highlightColor = this.colorToNumber(palette.highlight);
       const bg = scene.add.rectangle(0, 0, width - 40, 50, highlightColor, 0.1);
       bg.setStrokeStyle(1, highlightColor, 0.3);
       row.add(bg);
@@ -338,16 +337,16 @@ export class ModernLeaderboardUI extends Phaser.GameObjects.Container {
     const rankBg = scene.add.circle(-width / 2 + 50, 0, 18, 0x000000, 0);
     if (entry.rank <= 3) {
       const colors = [palette.gold, palette.silver, palette.bronze];
-      const colorValue = DS.colorStringToNumber(colors[entry.rank - 1]);
+      const colorValue = this.colorToNumber(colors[entry.rank - 1]);
       rankBg.setFillStyle(colorValue, 0.2);
       rankBg.setStrokeStyle(2, colorValue, 0.8);
     } else {
-      rankBg.setStrokeStyle(1, DS.colorStringToNumber(palette.highlightBorder), 0.5);
+      rankBg.setStrokeStyle(1, this.colorToNumber(palette.highlightBorder), 0.5);
     }
     row.add(rankBg);
 
     const rankText = scene.add.text(-width / 2 + 50, 0, entry.rank.toString(), {
-      fontSize: entry.rank <= 3 ? DS.getFontSize('lg') : DS.getFontSize('base'),
+      fontSize: entry.rank <= 3 ? this.getFontSize('lg') : this.getFontSize('base'),
       fontFamily: displayFont,
       fontStyle: '700 normal',
       color: entry.rank <= 3
@@ -358,7 +357,7 @@ export class ModernLeaderboardUI extends Phaser.GameObjects.Container {
 
     // Username
     const username = scene.add.text(-width / 2 + 100, 0, entry.username, {
-      fontSize: DS.getFontSize('base'),
+      fontSize: this.getFontSize('base'),
       fontFamily: bodyFont,
       fontStyle: entry.isCurrentUser ? '600 normal' : '400 normal',
       color: entry.isCurrentUser ? palette.textPrimary : palette.grayLighter
@@ -370,7 +369,7 @@ export class ModernLeaderboardUI extends Phaser.GameObjects.Container {
       [palette.gold, palette.silver, palette.bronze][entry.rank - 1] : palette.gray;
 
     const score = scene.add.text(width / 2 - 50, 0, entry.score.toLocaleString(), {
-      fontSize: DS.getFontSize('lg'),
+      fontSize: this.getFontSize('lg'),
       fontFamily: displayFont,
       fontStyle: '600 normal',
       color: scoreColor
@@ -663,20 +662,20 @@ export class ModernLeaderboardUI extends Phaser.GameObjects.Container {
   private createPlayerPositionDisplay(scene: Phaser.Scene, x: number, y: number, panelWidth: number): void {
     this.playerPositionContainer = scene.add.container(x, y);
     const palette = this.getPalette();
-    const displayFont = DS.getFontFamily('display');
+    const displayFont = this.getFontFamily('display');
 
     // Background bar
     this.playerPositionBg = scene.add.rectangle(
       0, 0,
       panelWidth - 40, 60,
-      DS.colorStringToNumber(palette.closeBg), 1
+      this.colorToNumber(palette.closeBg), 1
     );
-    this.playerPositionBg.setStrokeStyle(1, DS.colorStringToNumber(palette.panelBorder), 0.5);
+    this.playerPositionBg.setStrokeStyle(1, this.colorToNumber(palette.panelBorder), 0.5);
     this.playerPositionContainer.add(this.playerPositionBg);
 
     // Player rank text
     this.playerPositionText = scene.add.text(0, 0, 'Your Rank: Calculating...', {
-      fontSize: DS.getFontSize('lg'),
+      fontSize: this.getFontSize('lg'),
       fontFamily: displayFont,
       fontStyle: '600 normal',
       color: palette.textPrimary
@@ -690,11 +689,12 @@ export class ModernLeaderboardUI extends Phaser.GameObjects.Container {
    * Update player position based on score
    */
   private async updatePlayerPosition(entries: LeaderboardEntry[]): Promise<void> {
+    const palette = this.getPalette();
+
     try {
       const { highScoreService } = await import('../../../services/HighScoreService');
       const currentUsername = highScoreService.getUsername();
       const currentScore = this.currentPlayerScore || 0;
-      const palette = this.getPalette();
 
       // Find player in entries
       const playerEntry = entries.find(e => e.username === currentUsername);
@@ -735,28 +735,28 @@ export class ModernLeaderboardUI extends Phaser.GameObjects.Container {
 
   private getPalette() {
     return {
-      overlay: DS.getColor('solid', 'bgPrimary'),
-      panelBackground: DS.getColor('accents', 'indigoSurface'),
-      panelBorder: DS.getColor('accents', 'indigo'),
-      textPrimary: DS.getColor('solid', 'textPrimary'),
-      textMuted: DS.getColor('accents', 'gray'),
-      textSubtle: DS.getColor('accents', 'grayMuted'),
-      textSecondary: DS.getColor('accents', 'grayLight'),
-      closeBg: DS.getColor('accents', 'indigoSurface'),
-      closeBgHover: DS.getColor('accents', 'indigoSurfaceHover'),
-      closeText: DS.getColor('accents', 'gray'),
-      highlight: DS.getColor('accents', 'indigo'),
-      highlightSurface: DS.getColor('accents', 'indigoSurface'),
-      highlightHover: DS.getColor('accents', 'indigoSurfaceHover'),
-      highlightBorder: DS.getColor('accents', 'indigoSurfaceBorder'),
-      gold: DS.getColor('accents', 'gold'),
-      silver: DS.getColor('accents', 'silver'),
-      bronze: DS.getColor('accents', 'bronze'),
-      gray: DS.getColor('accents', 'gray'),
-      grayLight: DS.getColor('accents', 'grayLight'),
-      grayLighter: DS.getColor('accents', 'grayLighter'),
-      grayMuted: DS.getColor('accents', 'grayMuted'),
-      blueSoft: DS.getColor('accents', 'blueSoft'),
+      overlay: this.getColor('solid', 'bgPrimary'),
+      panelBackground: this.getColor('accents', 'indigoSurface'),
+      panelBorder: this.getColor('accents', 'indigo'),
+      textPrimary: this.getColor('solid', 'textPrimary'),
+      textMuted: this.getColor('accents', 'gray'),
+      textSubtle: this.getColor('accents', 'grayMuted'),
+      textSecondary: this.getColor('accents', 'grayLight'),
+      closeBg: this.getColor('accents', 'indigoSurface'),
+      closeBgHover: this.getColor('accents', 'indigoSurfaceHover'),
+      closeText: this.getColor('accents', 'gray'),
+      highlight: this.getColor('accents', 'indigo'),
+      highlightSurface: this.getColor('accents', 'indigoSurface'),
+      highlightHover: this.getColor('accents', 'indigoSurfaceHover'),
+      highlightBorder: this.getColor('accents', 'indigoSurfaceBorder'),
+      gold: this.getColor('accents', 'gold'),
+      silver: this.getColor('accents', 'silver'),
+      bronze: this.getColor('accents', 'bronze'),
+      gray: this.getColor('accents', 'gray'),
+      grayLight: this.getColor('accents', 'grayLight'),
+      grayLighter: this.getColor('accents', 'grayLighter'),
+      grayMuted: this.getColor('accents', 'grayMuted'),
+      blueSoft: this.getColor('accents', 'blueSoft'),
     };
   }
 

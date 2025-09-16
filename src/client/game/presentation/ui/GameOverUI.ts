@@ -3,9 +3,9 @@
  */
 import * as Phaser from 'phaser';
 import { highScoreService } from '../../../services/HighScoreService';
-import { DS } from '../../config/DesignSystem';
+import { UIComponent } from './components/UIComponent';
 
-export class GameOverUI extends Phaser.GameObjects.Container {
+export class GameOverUI extends UIComponent {
   private background: Phaser.GameObjects.Rectangle;
   private panel: Phaser.GameObjects.Rectangle;
   private gameOverText: Phaser.GameObjects.Text;
@@ -17,29 +17,25 @@ export class GameOverUI extends Phaser.GameObjects.Container {
   private isVisible: boolean = false;
 
   constructor(scene: Phaser.Scene) {
-    super(scene, 0, 0);
+    super(scene, { visible: false });
+    this.setDepth(2000);
 
     const { width, height } = scene.cameras.main;
 
-    const spacing = {
-      xl: DS.getSpacingValue('xl'),
-      xxl: DS.getSpacingValue('xxl'),
-      xxxl: DS.getSpacingValue('xxxl'),
-    };
+    const spacing = this.spacing;
 
     const colors = {
-      bgPrimary: DS.getColor('solid', 'bgPrimary'),
-      bgElevated: DS.getColor('solid', 'bgElevated'),
-      glassBorder: DS.getColor('glass', 'border'),
-      textPrimary: DS.getColor('solid', 'textPrimary'),
-      danger: DS.getColor('solid', 'danger'),
-      warning: DS.getColor('solid', 'warning'),
-      info: DS.getColor('solid', 'info'),
-      success: DS.getColor('solid', 'success'),
+      bgPrimary: this.getColor('solid', 'bgPrimary'),
+      bgElevated: this.getColor('solid', 'bgElevated'),
+      glassBorder: this.getColor('glass', 'border'),
+      textPrimary: this.getColor('solid', 'textPrimary'),
+      danger: this.getColor('solid', 'danger'),
+      warning: this.getColor('solid', 'warning'),
+      info: this.getColor('solid', 'info'),
+      success: this.getColor('solid', 'success'),
     };
 
     // Ensure this UI sits above everything else and starts hidden
-    this.setDepth(1000);
     this.setVisible(false);
 
     // Semi-transparent background overlay with blur effect
@@ -48,7 +44,7 @@ export class GameOverUI extends Phaser.GameObjects.Container {
       height / 2,
       width,
       height,
-      DS.colorStringToNumber(colors.bgPrimary),
+      this.colorToNumber(colors.bgPrimary),
       0.85
     );
     this.background.setInteractive();
@@ -62,10 +58,10 @@ export class GameOverUI extends Phaser.GameObjects.Container {
       height / 2,
       panelWidth,
       panelHeight,
-      DS.colorStringToNumber(colors.bgElevated),
+      this.colorToNumber(colors.bgElevated),
       0.95
     );
-    this.panel.setStrokeStyle(1, DS.colorStringToNumber(colors.glassBorder));
+    this.panel.setStrokeStyle(1, this.colorToNumber(colors.glassBorder));
     this.add(this.panel);
 
     // Game Over title with Inter Black font
@@ -74,8 +70,8 @@ export class GameOverUI extends Phaser.GameObjects.Container {
       height / 2 - panelHeight / 2 + spacing.xxl,
       'GAME OVER',
       {
-        fontSize: DS.getFontSize('3xl'),
-        fontFamily: DS.getFontFamily('displayBlack'),
+        fontSize: this.getFontSize('3xl'),
+        fontFamily: this.getFontFamily('displayBlack'),
         fontStyle: '900 normal', // Inter Black
         color: colors.danger,
         align: 'center'
@@ -89,8 +85,8 @@ export class GameOverUI extends Phaser.GameObjects.Container {
       height / 2 - panelHeight / 2 + spacing.xxl + spacing.xxxl,
       'Score: 0',
       {
-        fontSize: DS.getFontSize('2xl'),
-        fontFamily: DS.getFontFamily('display'),
+        fontSize: this.getFontSize('2xl'),
+        fontFamily: this.getFontFamily('display'),
         fontStyle: '700 normal', // Bold
         color: colors.textPrimary,
         align: 'center'
@@ -103,7 +99,7 @@ export class GameOverUI extends Phaser.GameObjects.Container {
       width / 2,
       height / 2 - panelHeight / 2 + spacing.xxl + spacing.xxxl + spacing.xl,
       'Best: 0',
-      DS.getTextStyle('body', {
+      this.getTextStyle('body', {
         color: colors.warning,
         weight: 'medium'
       })
@@ -115,7 +111,7 @@ export class GameOverUI extends Phaser.GameObjects.Container {
       width / 2,
       height / 2 - panelHeight / 2 + spacing.xxl + spacing.xxxl + spacing.xxxl,
       'Daily Rank: Loading...',
-      DS.getTextStyle('caption', {
+      this.getTextStyle('caption', {
         color: colors.info,
         weight: 'regular'
       })
@@ -151,9 +147,6 @@ export class GameOverUI extends Phaser.GameObjects.Container {
 
     // Initially hidden
     this.setVisible(false);
-    this.setDepth(2000);
-
-    scene.add.existing(this);
   }
 
   /**
@@ -170,15 +163,15 @@ export class GameOverUI extends Phaser.GameObjects.Container {
     const button = scene.add.container(x, y);
 
     const buttonWidth = 200;
-    const buttonHeight = DS.getSpacingValue('xxl');
+    const buttonHeight = this.getSpacing('xxl');
 
-    const bg = scene.add.rectangle(0, 0, buttonWidth, buttonHeight, DS.colorStringToNumber(color), 0.9);
-    bg.setStrokeStyle(1, DS.colorStringToNumber(DS.getColor('glass', 'border')));
+    const bg = scene.add.rectangle(0, 0, buttonWidth, buttonHeight, this.colorToNumber(color), 0.9);
+    bg.setStrokeStyle(1, this.colorToNumber(this.getColor('glass', 'border')));
     bg.setInteractive();
 
     const label = scene.add.text(0, 0, text,
-      DS.getTextStyle('button', {
-        color: DS.getColor('solid', 'textPrimary'),
+      this.getTextStyle('button', {
+        color: this.getColor('solid', 'textPrimary'),
         weight: 'medium'
       })
     ).setOrigin(0.5);
