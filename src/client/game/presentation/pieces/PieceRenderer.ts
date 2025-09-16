@@ -3,6 +3,7 @@ import { PieceModel } from '../../core/models/PieceModel';
 import { NeonThemeProvider } from '../theme/NeonThemeProvider';
 import { HexCoordinates } from '../../../../shared/types/hex';
 import { RenderConfig } from '../../config/RenderConfig';
+import { DepthEffects } from '../utils/DepthEffects';
 
 /**
  * PieceRenderer - Visual representation of a draggable piece
@@ -17,6 +18,8 @@ export class PieceRenderer {
   private hexagons: Phaser.GameObjects.Image[] = [];
   private shadow: Phaser.GameObjects.Graphics;
   private glow: Phaser.GameObjects.Graphics;
+  private depthEffects: DepthEffects;
+  private readonly cellOffsets: Phaser.Math.Vector2[] = [];
 
   private dragging: boolean = false;
   private hexSize: number; // Dynamic size
@@ -44,10 +47,14 @@ export class PieceRenderer {
     // Create container - depth will be managed by parent
     this.container = scene.add.container(0, 0);
 
+    this.depthEffects = DepthEffects.forScene(scene, themeProvider);
+
     // Create visual elements
     this.createShadow();
     this.createGlow();
     this.renderPiece();
+
+    this.depthEffects.registerPiece(this.container, this.shadow, this.glow);
   }
 
   /**
@@ -102,6 +109,8 @@ export class PieceRenderer {
     const centerY = (bounds.minY + bounds.maxY) / 2;
 
     // Image mode: draw with rotated SVG fill texture for crisp edges
+    this.cellOffsets.length = 0;
+
     shape.cells.forEach((coord) => {
       const pos = this.hexToPixel(coord);
       const relX = pos.x - centerX;
@@ -116,7 +125,11 @@ export class PieceRenderer {
       img.setTint(pieceColor);
       this.container.add(img);
       this.hexagons.push(img);
+
+      this.cellOffsets.push(new Phaser.Math.Vector2(relX, relY));
     });
+
+    this.depthEffects.updatePieceShadow(this.shadow, this.cellOffsets, this.hexSize);
   }
 
   /**
@@ -181,35 +194,9 @@ export class PieceRenderer {
       // Scale to normal size when dragging
       this.scaleToNormalSize();
 
-      // Show glow
-      this.scene.tweens.add({
-        targets: this.glow,
-        alpha: 0.6,
-        duration: 200,
-        ease: 'Power2'
-      });
-
-      // Hide shadow
-      this.scene.tweens.add({
-        targets: this.shadow,
-        alpha: 0,
-        duration: 100
-      });
+      this.depthEffects.beginDragFocus(this.container, this.shadow, this.glow);
     } else {
-      // Hide glow
-      this.scene.tweens.add({
-        targets: this.glow,
-        alpha: 0,
-        duration: 200,
-        ease: 'Power2'
-      });
-
-      // Show shadow
-      this.scene.tweens.add({
-        targets: this.shadow,
-        alpha: 0.2,
-        duration: 200
-      });
+      this.depthEffects.endDragFocus(this.container, this.shadow, this.glow);
     }
   }
 
@@ -232,6 +219,7 @@ export class PieceRenderer {
    */
   setPosition(x: number, y: number): void {
     this.container.setPosition(x, y);
+    this.depthEffects.syncPieceBase(this.container, this.shadow, this.glow);
   }
 
   /**
@@ -335,6 +323,8 @@ export class PieceRenderer {
       duration: 200,
       ease: 'Power2'
     });
+
+    this.depthEffects.syncPieceBase(this.container, this.shadow, this.glow);
   }
 
   /**
@@ -345,12 +335,37 @@ export class PieceRenderer {
     // Ensure container scale reflects the normal size
     const scaleFactor = this.normalHexSize / this.originalHexSize;
     this.container.setScale(scaleFactor);
+    this.depthEffects.syncPieceBase(this.container, this.shadow, this.glow);
+  }
+
+  /**
+   * Apply hover depth effects if available
+   */
+  applyHoverDepth(): void {
+    if (this.dragging) return;
+    this.depthEffects.applyPieceHover(this.container, this.shadow, this.glow);
+  }
+
+  /**
+   * Release hover depth effects and restore defaults
+   */
+  releaseHoverDepth(): void {
+    if (this.dragging) return;
+    this.depthEffects.releasePieceHover(this.container, this.shadow, this.glow);
+  }
+
+  /**
+   * Re-sync base metrics for depth effects (used after snapping)
+   */
+  syncDepthBase(): void {
+    this.depthEffects.syncPieceBase(this.container, this.shadow, this.glow);
   }
 
   /**
    * Destroy the renderer
    */
   destroy(): void {
+    this.depthEffects.cleanupGameObject(this.container);
     this.container.destroy();
   }
 }
