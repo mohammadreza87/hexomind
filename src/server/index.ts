@@ -18,6 +18,8 @@ import {
   incrementGamesPlayed
 } from './api/highscores';
 import { initializeLeaderboards, ensurePlayerInLeaderboard } from './api/dummyData';
+import { normalizeLeaderboardEntries } from './utils/leaderboard';
+import type { LeaderboardEntry, LeaderboardPeriod } from '../shared/types/leaderboard';
 
 const app = express();
 
@@ -268,13 +270,21 @@ router.post('/api/highscore', async (req, res): Promise<void> => {
 
 router.get('/api/leaderboard', async (req, res): Promise<void> => {
   try {
-    const limit = parseInt(req.query.limit as string) || 10;
-    const type = req.query.type as string || 'global';
+    const rawLimit = Number(req.query.limit);
+    const limit = Number.isFinite(rawLimit) && rawLimit > 0
+      ? Math.min(Math.floor(rawLimit), 100)
+      : 10;
+
+    const rawType = (req.query.type as string | undefined)?.toLowerCase();
+    const allowedTypes: LeaderboardPeriod[] = ['daily', 'weekly', 'subreddit', 'global'];
+    const type: LeaderboardPeriod = allowedTypes.includes(rawType as LeaderboardPeriod)
+      ? (rawType as LeaderboardPeriod)
+      : 'global';
     const date = req.query.date as string;
 
     console.log(`Fetching ${type} leaderboard with limit ${limit}`);
 
-    let leaderboard;
+    let leaderboard: LeaderboardEntry[] = [];
     if (type === 'daily') {
       const today = date || new Date().toISOString().split('T')[0];
       console.log(`Fetching daily leaderboard for ${today}`);
@@ -289,6 +299,8 @@ router.get('/api/leaderboard', async (req, res): Promise<void> => {
       console.log('Fetching global leaderboard');
       leaderboard = await getGlobalLeaderboard(limit);
     }
+
+    leaderboard = normalizeLeaderboardEntries(leaderboard);
 
     console.log(`Leaderboard result: ${leaderboard.length} entries`);
     if (leaderboard.length > 0) {
@@ -308,6 +320,7 @@ router.get('/api/leaderboard', async (req, res): Promise<void> => {
       } else {
         leaderboard = await getGlobalLeaderboard(limit);
       }
+      leaderboard = normalizeLeaderboardEntries(leaderboard);
       console.log(`After initialization: ${leaderboard.length} entries`);
     }
 

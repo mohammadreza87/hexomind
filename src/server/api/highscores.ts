@@ -3,15 +3,13 @@
  */
 import { redis, context } from '@devvit/web/server';
 
+import type { LeaderboardEntry } from '../../shared/types/leaderboard';
+
 export interface HighScoreEntry {
   username: string;
   score: number;
   timestamp: number;
   postId?: string;
-}
-
-export interface LeaderboardEntry extends HighScoreEntry {
-  rank: number;
 }
 
 /**
