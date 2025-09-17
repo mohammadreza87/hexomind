@@ -423,25 +423,30 @@ export class SettingsUI extends UIComponent {
         const data = await response.json();
 
         if (data.available) {
-          // Save the custom username
-          highScoreService.setCustomUsername(username);
+          const result = await highScoreService.setCustomUsername(username);
 
-          // Update display
-          this.currentUsernameText.setText(username);
-          this.currentUsernameText.setColor(this.getColor('accents', 'indigo'));
+          if (result.success) {
+            this.currentUsernameText.setText(username);
+            this.currentUsernameText.setColor(this.getColor('accents', 'indigo'));
 
-          // Exit edit mode
-          this.cancelUsernameEdit();
+            this.cancelUsernameEdit();
 
-          // Show success
-          this.usernameStatusText.setText('✓ Username saved!');
-          this.usernameStatusText.setColor(this.getColor('accents', 'mint'));
-          this.usernameStatusText.setVisible(true);
+            if (result.offlineFallback) {
+              this.usernameStatusText.setText('✓ Username saved locally');
+              this.usernameStatusText.setColor(this.getColor('accents', 'amber'));
+            } else {
+              this.usernameStatusText.setText('✓ Username saved!');
+              this.usernameStatusText.setColor(this.getColor('accents', 'mint'));
+            }
 
-          // Hide status after 2 seconds
-          this.scene.time.delayedCall(2000, () => {
-            this.usernameStatusText.setVisible(false);
-          });
+            this.usernameStatusText.setVisible(true);
+            this.scene.time.delayedCall(2000, () => {
+              this.usernameStatusText.setVisible(false);
+            });
+          } else {
+            this.usernameStatusText.setText(result.message || 'Failed to save username');
+            this.usernameStatusText.setColor(this.getColor('accents', 'crimson'));
+          }
         } else {
           this.usernameStatusText.setText('Username already taken');
           this.usernameStatusText.setColor(this.getColor('accents', 'crimson'));
@@ -451,13 +456,13 @@ export class SettingsUI extends UIComponent {
       }
     } catch (error) {
       console.error('Error checking username:', error);
-      // Allow setting username offline
-      highScoreService.setCustomUsername(username);
+      const result = await highScoreService.setCustomUsername(username, { offlineOnly: true });
+
       this.currentUsernameText.setText(username);
       this.currentUsernameText.setColor(this.getColor('accents', 'indigo'));
       this.cancelUsernameEdit();
 
-      this.usernameStatusText.setText('✓ Username saved locally');
+      this.usernameStatusText.setText(result.message || '✓ Username saved locally');
       this.usernameStatusText.setColor(this.getColor('accents', 'amber'));
       this.usernameStatusText.setVisible(true);
 
