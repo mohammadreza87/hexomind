@@ -169,10 +169,10 @@ export class BoardRenderer {
     const dim = radius * 2;
     const base = this.scene.add.image(position.x, position.y, RenderConfig.TEXTURE_KEYS.HEX_BASE_SVG).setOrigin(0.5);
     base.setDisplaySize(dim, dim);
-    // No rotation - images should already be in correct orientation
+    base.setRotation(Math.PI / 6);  // Ensure consistent 30° rotation at creation time
     const fill = this.scene.add.image(position.x, position.y, RenderConfig.TEXTURE_KEYS.HEX_FILL_SVG).setOrigin(0.5);
     fill.setDisplaySize(dim - 2, dim - 2);
-    // No rotation - images should already be in correct orientation
+    fill.setRotation(Math.PI / 6);  // Ensure consistent 30° rotation at creation time
     fill.setVisible(false);
 
     // Create interactive zone
