@@ -114,32 +114,20 @@ export class BoardRenderer {
    * Calculate optimal hexagon size for viewport
    */
   private calculateOptimalSize(): void {
-    // For 1080x1920 resolution, use fixed optimal sizes
-    const { width, height } = this.scene.cameras.main;
+    const boardArea = this.viewportManager.getBoardArea();
+    const viewport = this.viewportManager.getViewport();
 
-    // Calculate size needed for radius-3 grid to fit comfortably
-    // Radius 3 = 7 hexagons wide, 7 hexagons tall
     const gridWidth = 7;
     const gridHeight = 7;
 
-    // With 1080x1920 resolution, we have more room for larger hexagons
-    const boardArea = {
-      width: width * 0.9,  // Use 90% of width
-      height: height * 0.45  // Use 45% of height for board
-    };
-
-    // Calculate hex size based on available space
-    // Width: size * sqrt(3) * gridWidth
-    // Height: size * 1.5 * gridHeight
     const sizeByWidth = boardArea.width / (Math.sqrt(3) * gridWidth);
     const sizeByHeight = boardArea.height / (1.5 * gridHeight);
 
-    // Use the smaller to ensure it fits, with good size for 1080p
-    this.hexSize = Math.min(sizeByWidth, sizeByHeight);
-    this.hexSize = Math.max(this.hexSize, 50); // Minimum size for 1080p
-    this.hexSize = Math.min(this.hexSize, 90); // Maximum size for clarity
+    const unclampedSize = Math.min(sizeByWidth, sizeByHeight);
+    const minSize = 42 * viewport.scaleFactor;
+    const maxSize = 96 * viewport.scaleFactor;
 
-    // Add spacing between cells for better visual clarity
+    this.hexSize = Phaser.Math.Clamp(unclampedSize, minSize, maxSize);
     this.hexSpacing = this.hexSize * 0.08;
   }
 
@@ -379,11 +367,8 @@ export class BoardRenderer {
    * Center the board on screen
    */
   private centerBoard(): void {
-    const viewport = this.viewportManager.getViewport();
-    // Position board much lower on screen, very close to pieces
-    const boardY = viewport.height * 0.55; // Position at 55% from top (much closer to pieces)
-    // Allow subpixel positioning for smoother anti-aliased edges
-    this.boardContainer.setPosition(viewport.centerX, boardY);
+    const boardArea = this.viewportManager.getBoardArea();
+    this.boardContainer.setPosition(boardArea.centerX, boardArea.y + boardArea.height / 2);
   }
 
   /**
@@ -496,6 +481,10 @@ export class BoardRenderer {
    */
   getContainer(): Phaser.GameObjects.Container {
     return this.boardContainer;
+  }
+
+  getViewportManager(): ViewportManager {
+    return this.viewportManager;
   }
 
   /**

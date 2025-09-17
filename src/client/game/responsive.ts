@@ -1,133 +1,182 @@
-import { ScreenConfig, getOptimalDimensions, calculateScaleFactor } from './config/ScreenConfig';
+export const DESIGN_WIDTH = 1080;
+export const DESIGN_HEIGHT = 1920;
 
-// Use optimal game dimensions from ScreenConfig
-export const GAME_ASPECT_RATIO = ScreenConfig.GAME_OPTIMAL.mobile.aspectRatio; // 390/844 = 0.462
+const MAX_SCALE = 1.6;
+const MIN_NOMINAL_SCALE = 0.75;
+const MAX_NOMINAL_SCALE = 1.4;
 
-// Set reasonable min/max for mobile-first approach
-export const MIN_GAME_WIDTH = ScreenConfig.DEVVIT.safe_width;  // 320
-export const MAX_GAME_WIDTH = ScreenConfig.BREAKPOINTS.tablet; // 768
-
-// Calculate heights based on mobile portrait aspect ratio (height should be ~2.16x width)
-export const MIN_GAME_HEIGHT = Math.round(MIN_GAME_WIDTH / GAME_ASPECT_RATIO); // ~693
-export const MAX_GAME_HEIGHT = Math.round(MAX_GAME_WIDTH / GAME_ASPECT_RATIO); // ~1663
-
-// Fallback dimensions (Devvit optimized)
-export const FALLBACK_VIEWPORT_WIDTH = ScreenConfig.GAME_OPTIMAL.devvit.width;  // 360
-export const FALLBACK_VIEWPORT_HEIGHT = ScreenConfig.GAME_OPTIMAL.devvit.height; // 640
+const clamp = (value: number, min: number, max: number): number => {
+  return Math.min(Math.max(value, min), max);
+};
 
 export type Orientation = 'portrait' | 'landscape';
 
-export interface ResponsiveDimensions {
-  width: number;
-  height: number;
-  scale: number;
-  orientation: Orientation;
-  platform: 'mobile' | 'tablet' | 'desktop' | 'devvit';
+export interface SafeAreaInsets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
 }
 
-/**
- * Calculate responsive dimensions based on viewport
- * Optimized for mobile-first with Devvit support
- */
-export const calculateResponsiveDimensions = (
-  viewportWidth: number,
-  viewportHeight: number
-): ResponsiveDimensions => {
-  const safeWidth = Math.max(1, viewportWidth);
-  const safeHeight = Math.max(1, viewportHeight);
-  const orientation: Orientation = safeWidth >= safeHeight ? 'landscape' : 'portrait';
+export interface ResponsiveRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  right: number;
+  bottom: number;
+  centerX: number;
+  centerY: number;
+}
 
-  // Get optimal dimensions for this viewport
-  const optimal = getOptimalDimensions(safeWidth, safeHeight);
+export interface ResponsiveLayout {
+  viewportWidth: number;
+  viewportHeight: number;
+  orientation: Orientation;
+  scale: number;
+  nominalScale: number;
+  dpr: number;
+  safeInsets: SafeAreaInsets;
+  safeArea: ResponsiveRect;
+  boardArea: ResponsiveRect;
+  trayArea: ResponsiveRect;
+  uiArea: ResponsiveRect;
+}
 
-  // Determine platform
-  let platform: ResponsiveDimensions['platform'] = 'mobile';
-  if (safeWidth >= ScreenConfig.BREAKPOINTS.desktop) {
-    platform = 'desktop';
-  } else if (safeWidth >= ScreenConfig.BREAKPOINTS.tablet) {
-    platform = 'tablet';
-  } else if (safeWidth <= ScreenConfig.DEVVIT.max_width && safeHeight <= ScreenConfig.DEVVIT.max_height) {
-    platform = 'devvit';
+interface ViewportSize {
+  width: number;
+  height: number;
+}
+
+interface LayoutPreset {
+  ui: number;
+  board: number;
+  tray: number;
+  gapSplit: number;
+}
+
+const LAYOUT_PRESETS: Record<Orientation, LayoutPreset> = {
+  portrait: {
+    ui: 0.12,
+    board: 0.62,
+    tray: 0.2,
+    gapSplit: 0.45
+  },
+  landscape: {
+    ui: 0.1,
+    board: 0.56,
+    tray: 0.22,
+    gapSplit: 0.5
+  }
+};
+
+const DEFAULT_VIEWPORT: ViewportSize = {
+  width: DESIGN_WIDTH,
+  height: DESIGN_HEIGHT
+};
+
+const toRect = (x: number, y: number, width: number, height: number): ResponsiveRect => ({
+  x,
+  y,
+  width,
+  height,
+  right: x + width,
+  bottom: y + height,
+  centerX: x + width / 2,
+  centerY: y + height / 2
+});
+
+const resolveSafeAreaInsets = (): SafeAreaInsets => {
+  if (typeof window === 'undefined') {
+    return { top: 0, right: 0, bottom: 0, left: 0 };
   }
 
-  let gameWidth: number;
-  let gameHeight: number;
-
-  if (orientation === 'portrait') {
-    // Portrait mode - prioritize height
-    gameWidth = Math.min(safeWidth, optimal.width);
-    gameHeight = Math.round(gameWidth / optimal.aspectRatio);
-
-    // If height exceeds viewport, scale down
-    if (gameHeight > safeHeight) {
-      gameHeight = safeHeight;
-      gameWidth = Math.round(gameHeight * optimal.aspectRatio);
-    }
-
-    // Apply min/max constraints
-    gameWidth = Math.max(MIN_GAME_WIDTH, Math.min(MAX_GAME_WIDTH, gameWidth));
-    gameHeight = Math.max(MIN_GAME_HEIGHT, Math.min(MAX_GAME_HEIGHT, gameHeight));
-  } else {
-    // Landscape mode - flip the dimensions
-    gameHeight = Math.min(safeHeight, optimal.width); // Use portrait width as landscape height
-    gameWidth = Math.round(gameHeight / optimal.aspectRatio);
-
-    // If width exceeds viewport, scale down
-    if (gameWidth > safeWidth) {
-      gameWidth = safeWidth;
-      gameHeight = Math.round(gameWidth * optimal.aspectRatio);
-    }
-
-    // Apply constraints (swapped for landscape)
-    gameHeight = Math.max(MIN_GAME_WIDTH, Math.min(MAX_GAME_WIDTH, gameHeight));
-    gameWidth = Math.max(MIN_GAME_HEIGHT, Math.min(MAX_GAME_HEIGHT, gameWidth));
+  const viewport = window.visualViewport;
+  if (!viewport) {
+    return { top: 0, right: 0, bottom: 0, left: 0 };
   }
 
-  // Calculate scale factor for UI scaling
-  const scale = calculateScaleFactor(gameWidth, gameHeight, safeWidth, safeHeight);
+  const top = viewport.offsetTop || 0;
+  const left = viewport.offsetLeft || 0;
+  const bottom = Math.max(0, (window.innerHeight || viewport.height) - viewport.height - top);
+  const right = Math.max(0, (window.innerWidth || viewport.width) - viewport.width - left);
 
-  // Final dimensions
-  const finalWidth = Math.round(gameWidth);
-  const finalHeight = Math.round(gameHeight);
+  return { top, right, bottom, left };
+};
+
+export const measureViewport = (parent?: string): ViewportSize => {
+  if (typeof window === 'undefined') {
+    return DEFAULT_VIEWPORT;
+  }
+
+  if (parent) {
+    const element = document.getElementById(parent) ?? document.querySelector<HTMLElement>(`#${parent}`);
+    if (element) {
+      const rect = element.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        return { width: rect.width, height: rect.height };
+      }
+    }
+  }
+
+  const viewport = window.visualViewport;
+  if (viewport) {
+    return { width: viewport.width, height: viewport.height };
+  }
 
   return {
-    width: finalWidth,
-    height: finalHeight,
-    scale,
-    orientation,
-    platform
+    width: window.innerWidth || DEFAULT_VIEWPORT.width,
+    height: window.innerHeight || DEFAULT_VIEWPORT.height
   };
 };
 
-/**
- * Get hex size based on game dimensions and grid size
- */
-export function getResponsiveHexSize(
-  gameWidth: number,
-  gameHeight: number,
-  gridCols: number,
-  gridRows: number
-): number {
-  // Calculate hex size to fit the game area
-  // Account for hex spacing and margins
-  const marginPercent = 0.1; // 10% margin on each side
-  const spacingFactor = 1.1; // 10% spacing between hexes
+export const calculateResponsiveLayout = (
+  viewportWidth: number,
+  viewportHeight: number
+): ResponsiveLayout => {
+  const safeInsets = resolveSafeAreaInsets();
 
-  const availableWidth = gameWidth * (1 - marginPercent * 2);
-  const availableHeight = gameHeight * (1 - marginPercent * 2);
+  const safeWidth = Math.max(viewportWidth - safeInsets.left - safeInsets.right, 1);
+  const safeHeight = Math.max(viewportHeight - safeInsets.top - safeInsets.bottom, 1);
 
-  // Hexagon width calculation (flat-top orientation)
-  const hexWidthFromCols = availableWidth / (gridCols * spacingFactor);
+  const orientation: Orientation = safeWidth >= safeHeight ? 'landscape' : 'portrait';
 
-  // Hexagon height calculation
-  const hexHeightFromRows = availableHeight / (gridRows * 0.75 * spacingFactor); // 0.75 for hex overlap
+  const scale = clamp(Math.min(safeWidth / DESIGN_WIDTH, safeHeight / DESIGN_HEIGHT), 0, MAX_SCALE);
+  const nominalScale = clamp(scale, MIN_NOMINAL_SCALE, MAX_NOMINAL_SCALE);
 
-  // Use the smaller to ensure everything fits
-  const hexSize = Math.min(hexWidthFromCols, hexHeightFromRows) / 2;
+  const gameWidth = DESIGN_WIDTH * scale;
+  const gameHeight = DESIGN_HEIGHT * scale;
 
-  // Apply min/max constraints
-  const minHexSize = 15; // Minimum playable size
-  const maxHexSize = 50; // Maximum for visual clarity
+  const offsetX = safeInsets.left + (safeWidth - gameWidth) / 2;
+  const offsetY = safeInsets.top + (safeHeight - gameHeight) / 2;
 
-  return Math.max(minHexSize, Math.min(maxHexSize, hexSize));
-}
+  const safeArea = toRect(offsetX, offsetY, gameWidth, gameHeight);
+
+  const preset = LAYOUT_PRESETS[orientation];
+  const uiHeight = gameHeight * preset.ui;
+  const boardHeight = gameHeight * preset.board;
+  const trayHeight = gameHeight * preset.tray;
+  const gapTotal = Math.max(gameHeight - (uiHeight + boardHeight + trayHeight), 0);
+  const gapTop = gapTotal * preset.gapSplit;
+  const gapBottom = gapTotal - gapTop;
+
+  const uiArea = toRect(offsetX, offsetY, gameWidth, uiHeight);
+  const boardArea = toRect(offsetX, uiArea.bottom + gapTop, gameWidth, boardHeight);
+  const trayArea = toRect(offsetX, boardArea.bottom + gapBottom, gameWidth, trayHeight);
+
+  const dpr = typeof window === 'undefined' ? 1 : Math.min(window.devicePixelRatio || 1, 3);
+
+  return {
+    viewportWidth,
+    viewportHeight,
+    orientation,
+    scale,
+    nominalScale,
+    dpr,
+    safeInsets,
+    safeArea,
+    boardArea,
+    trayArea,
+    uiArea
+  };
+};

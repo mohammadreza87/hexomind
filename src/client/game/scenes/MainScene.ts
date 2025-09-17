@@ -145,7 +145,7 @@ export class MainScene extends Phaser.Scene {
     this.gameOverService = new GameOverService(this.placementValidator);
 
     // Create piece tray
-    this.pieceTray = new PieceTray(this, this.themeProvider);
+    this.pieceTray = new PieceTray(this, this.themeProvider, this.boardRenderer.getViewportManager());
 
     // Create UI
     this.createUI();

@@ -1,71 +1,34 @@
 import * as Phaser from 'phaser';
 import { MainScene } from './scenes/MainScene';
-import {
-  calculateResponsiveDimensions as computeResponsiveDimensions,
-  FALLBACK_VIEWPORT_HEIGHT,
-  FALLBACK_VIEWPORT_WIDTH,
-  MAX_GAME_HEIGHT,
-  MAX_GAME_WIDTH,
-  MIN_GAME_HEIGHT,
-  MIN_GAME_WIDTH,
-  ResponsiveDimensions
-} from './responsive';
+import { calculateResponsiveLayout, measureViewport, ResponsiveLayout } from './responsive';
 
 /**
  * Hexomind Game Configuration
  * Optimized for Reddit Devvit with high-DPI support
  */
 
-const getDevicePixelRatio = (): number => {
-  if (typeof window === 'undefined') {
-    return 2;
-  }
-
-  // Use actual device pixel ratio for best quality (up to 3 for retina displays)
-  return Math.min(window.devicePixelRatio || 1, 3);
-};
-
-const getViewportSize = (parent?: string): { width: number; height: number } => {
-  if (typeof window === 'undefined') {
-    return { width: FALLBACK_VIEWPORT_WIDTH, height: FALLBACK_VIEWPORT_HEIGHT };
-  }
-
-  if (typeof document !== 'undefined' && parent) {
-    const element = document.getElementById(parent) ?? document.querySelector<HTMLElement>(`#${parent}`);
-    if (element) {
-      const rect = element.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) {
-        return { width: rect.width, height: rect.height };
-      }
-    }
-  }
-
-  const viewport = window.visualViewport;
-  if (viewport) {
-    return { width: viewport.width, height: viewport.height };
-  }
-
-  return {
-    width: window.innerWidth || FALLBACK_VIEWPORT_WIDTH,
-    height: window.innerHeight || FALLBACK_VIEWPORT_HEIGHT
-  };
-};
-
 const buildGameConfig = (
   parent: string,
-  dimensions: ResponsiveDimensions,
-  resolution: number
+  layout: ResponsiveLayout
 ): Phaser.Types.Core.GameConfig => ({
   type: Phaser.WEBGL, // Force WebGL for better performance
   parent,
   backgroundColor: '#1a1a1b', // Reddit dark mode default
-  resolution,
+  resolution: layout.dpr,
   scale: {
-    mode: Phaser.Scale.FIT, // Fit the fixed size to container
+    mode: Phaser.Scale.RESIZE,
     autoCenter: Phaser.Scale.CENTER_BOTH,
-    width: 1080,  // Fixed width for Full HD portrait
-    height: 1920, // Fixed height for Full HD portrait
-    parent
+    parent,
+    width: Math.round(layout.viewportWidth),
+    height: Math.round(layout.viewportHeight),
+    min: {
+      width: 320,
+      height: 568
+    },
+    max: {
+      width: 2560,
+      height: 1440
+    }
   },
   scene: [MainScene],
   physics: {
@@ -99,28 +62,53 @@ const buildGameConfig = (
 });
 
 const StartGame = (parent: string) => {
-  const viewport = getViewportSize(parent);
-  const dimensions = computeResponsiveDimensions(viewport.width, viewport.height);
-  const config = buildGameConfig(parent, dimensions, getDevicePixelRatio());
+  const viewport = measureViewport(parent);
+  const initialLayout = calculateResponsiveLayout(viewport.width, viewport.height);
+  const config = buildGameConfig(parent, initialLayout);
 
   const game = new Phaser.Game(config);
 
+  const applyLayout = (layout: ResponsiveLayout) => {
+    const roundedWidth = Math.round(layout.viewportWidth);
+    const roundedHeight = Math.round(layout.viewportHeight);
+
+    game.registry.set('responsive:layout', layout);
+    game.events.emit('responsive:layout', layout);
+    game.scale.resize(roundedWidth, roundedHeight);
+    game.scale.refresh();
+  };
+
+  applyLayout(initialLayout);
+
   if (typeof window !== 'undefined') {
-    const updateSize = () => {
-      // Just refresh the scale, don't resize since we're using fixed dimensions
-      game.scale.refresh();
+    let pendingFrame: number | null = null;
+
+    const scheduleLayoutRefresh = () => {
+      if (pendingFrame !== null) {
+        window.cancelAnimationFrame(pendingFrame);
+      }
+
+      pendingFrame = window.requestAnimationFrame(() => {
+        pendingFrame = null;
+        const nextViewport = measureViewport(parent);
+        const nextLayout = calculateResponsiveLayout(nextViewport.width, nextViewport.height);
+        applyLayout(nextLayout);
+      });
     };
 
-    window.addEventListener('resize', updateSize);
+    window.addEventListener('resize', scheduleLayoutRefresh);
+    window.addEventListener('orientationchange', scheduleLayoutRefresh);
     const visualViewport = window.visualViewport;
-    visualViewport?.addEventListener('resize', updateSize);
-
-    game.scale.on(Phaser.Scale.Events.ORIENTATION_CHANGE, updateSize);
+    visualViewport?.addEventListener('resize', scheduleLayoutRefresh);
 
     game.events.once(Phaser.Core.Events.DESTROY, () => {
-      window.removeEventListener('resize', updateSize);
-      visualViewport?.removeEventListener('resize', updateSize);
-      game.scale.off(Phaser.Scale.Events.ORIENTATION_CHANGE, updateSize);
+      window.removeEventListener('resize', scheduleLayoutRefresh);
+      window.removeEventListener('orientationchange', scheduleLayoutRefresh);
+      visualViewport?.removeEventListener('resize', scheduleLayoutRefresh);
+
+      if (pendingFrame !== null) {
+        window.cancelAnimationFrame(pendingFrame);
+      }
     });
   }
 
@@ -128,4 +116,3 @@ const StartGame = (parent: string) => {
 };
 
 export default StartGame;
-export { computeResponsiveDimensions as calculateResponsiveDimensions };

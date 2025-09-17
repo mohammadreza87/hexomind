@@ -2,7 +2,7 @@ import * as Phaser from 'phaser';
 import { PieceRenderer } from './PieceRenderer';
 import { PieceModel } from '../../core/models/PieceModel';
 import { NeonThemeProvider } from '../theme/NeonThemeProvider';
-import { DS } from '../../config/DesignSystem';
+import { ViewportManager } from '../board/ViewportManager';
 
 /**
  * PieceTray - Manages the display and interaction of available pieces
@@ -12,9 +12,7 @@ export class PieceTray {
   private scene: Phaser.Scene;
   private themeProvider: NeonThemeProvider;
   private container: Phaser.GameObjects.Container;
-  private containerElement: HTMLElement | null = null;
-  private supportsContainerQueries: boolean = false;
-  private containerStyles: CSSStyleDeclaration | null = null;
+  private viewportManager: ViewportManager;
 
   private pieceSlots: PieceSlot[] = [];
   private pieceRenderers: Map<string, PieceRenderer> = new Map();
@@ -23,27 +21,23 @@ export class PieceTray {
   private slotSize: number = 100; // Size of each slot placeholder
   private slotSpacing: number = 20; // Spacing between slots
   private trayYPosition: number = 0; // Y position of tray
+  private readonly onScaleResize = () => this.positionTray();
 
-  constructor(scene: Phaser.Scene, themeProvider: NeonThemeProvider) {
+  constructor(scene: Phaser.Scene, themeProvider: NeonThemeProvider, viewportManager: ViewportManager) {
     this.scene = scene;
     this.themeProvider = themeProvider;
+    this.viewportManager = viewportManager;
 
     // Create main container with high depth to be above board
     this.container = scene.add.container(0, 0);
     this.container.setDepth(100); // Higher depth to ensure visibility
 
-    this.containerElement = this.resolveContainerElement();
-    this.supportsContainerQueries = this.detectContainerQuerySupport();
-    this.refreshContainerStyles();
-
     this.setupSlots();
     this.positionTray();
 
-    // Listen for resize
-    scene.scale.on('resize', () => {
-      this.refreshContainerStyles();
-      this.positionTray();
-    });
+    scene.scale.on('resize', this.onScaleResize);
+
+    this.scene.events.on('viewport:changed', this.handleViewportChanged, this);
   }
 
   /**
@@ -83,29 +77,28 @@ export class PieceTray {
    * Position the tray on screen
    */
   private positionTray(): void {
-    const gameSize = this.scene.scale.gameSize;
-    const width = gameSize?.width ?? this.scene.cameras.main.width;
-    const height = gameSize?.height ?? this.scene.cameras.main.height;
+    const trayArea = this.viewportManager.getPieceTrayArea();
+    const viewport = this.viewportManager.getViewport();
 
-    this.refreshContainerStyles();
-    const metrics = this.getTrayMetrics(width);
+    const availableWidth = trayArea.width;
+    const availableHeight = trayArea.height;
+    const scale = viewport.scaleFactor;
 
-    // For 1080x1920, use larger fixed slot size
-    const baseSlotSize = 150; // Fixed size for 1080p
-    this.slotSize = baseSlotSize;
+    const maxSlotWidth = (availableWidth * 0.9) / this.SLOT_COUNT;
+    const candidateSlot = Math.min(availableHeight * 0.78, maxSlotWidth);
+    this.slotSize = Phaser.Math.Clamp(candidateSlot, 96 * scale, 220 * scale);
 
-    const totalSlotsWidth = this.SLOT_COUNT * this.slotSize;
-    const targetAvailableWidth = Math.max(width * metrics.availableWidthRatio, totalSlotsWidth);
-    const gapCount = Math.max(this.SLOT_COUNT - 1, 1);
-    const rawGap = (targetAvailableWidth - totalSlotsWidth) / gapCount;
-    this.slotSpacing = Math.max(rawGap, metrics.minSpacing);
+    const remainingWidth = Math.max(availableWidth - this.slotSize * this.SLOT_COUNT, 0);
+    this.slotSpacing = Phaser.Math.Clamp(
+      remainingWidth / Math.max(this.SLOT_COUNT - 1, 1),
+      18 * scale,
+      56 * scale
+    );
 
-    const occupiedWidth = totalSlotsWidth + this.slotSpacing * (this.SLOT_COUNT - 1);
-    const sidePadding = Math.max((width - occupiedWidth) / 2, metrics.minSpacing);
+    const totalWidth = this.slotSize * this.SLOT_COUNT + this.slotSpacing * (this.SLOT_COUNT - 1);
+    const startX = trayArea.x + (availableWidth - totalWidth) / 2 + this.slotSize / 2;
 
-    this.trayYPosition = height - height * metrics.bottomOffset;
-
-    const startX = sidePadding + this.slotSize / 2;
+    this.trayYPosition = trayArea.y + trayArea.height / 2;
 
     // Position each slot
     this.pieceSlots.forEach((slot, index) => {
@@ -116,12 +109,13 @@ export class PieceTray {
         // Update background size and position
         slot.background.clear();
         const theme = this.themeProvider.getTheme();
-        slot.background.fillStyle(theme.cellEmptyAlt, 0.15);
-        slot.background.lineStyle(1, theme.borderSubtle, 0.25);
+        slot.background.fillStyle(theme.cellEmptyAlt, 0.18);
+        slot.background.lineStyle(1, theme.borderSubtle, 0.3);
 
+        const cornerRadius = Phaser.Math.Clamp(12 * scale, 8, 20);
         const halfSize = this.slotSize / 2;
-        slot.background.fillRoundedRect(-halfSize, -halfSize, this.slotSize, this.slotSize, 8);
-        slot.background.strokeRoundedRect(-halfSize, -halfSize, this.slotSize, this.slotSize, 8);
+        slot.background.fillRoundedRect(-halfSize, -halfSize, this.slotSize, this.slotSize, cornerRadius);
+        slot.background.strokeRoundedRect(-halfSize, -halfSize, this.slotSize, this.slotSize, cornerRadius);
         slot.background.setPosition(slot.x, slot.y);
       }
 
@@ -135,139 +129,8 @@ export class PieceTray {
     });
   }
 
-  private resolveContainerElement(): HTMLElement | null {
-    const scaleParent = this.scene.scale?.parent;
-    if (scaleParent instanceof HTMLElement) {
-      return scaleParent;
-    }
-
-    const canvasParent = this.scene.game.canvas?.parentElement;
-    if (canvasParent instanceof HTMLElement) {
-      return canvasParent;
-    }
-
-    return null;
-  }
-
-  private detectContainerQuerySupport(): boolean {
-    if (typeof window === 'undefined' || typeof CSS === 'undefined') {
-      return false;
-    }
-
-    return (
-      !!this.containerElement &&
-      'ResizeObserver' in window &&
-      typeof CSS.supports === 'function' &&
-      CSS.supports('container-type: inline-size')
-    );
-  }
-
-  private refreshContainerStyles(): void {
-    if (!this.supportsContainerQueries || !this.containerElement) {
-      this.containerStyles = null;
-      return;
-    }
-
-    this.containerStyles = getComputedStyle(this.containerElement);
-  }
-
-  private getContainerMetric(varName: string, fallback: number): number {
-    if (!this.supportsContainerQueries || !this.containerStyles) {
-      return fallback;
-    }
-
-    const raw = this.containerStyles.getPropertyValue(varName);
-    if (!raw) {
-      return fallback;
-    }
-
-    const parsed = parseFloat(raw);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  }
-
-  private getTrayMetrics(containerWidth: number): TrayMetrics {
-    if (this.supportsContainerQueries && this.containerStyles) {
-      return {
-        slotMin: this.getContainerMetric('--game-tray-slot-min', 60),
-        slotMax: this.getContainerMetric('--game-tray-slot-max', 100),
-        availableWidthRatio: this.getContainerMetric('--game-tray-available-width', 0.9),
-        bottomOffset: this.getContainerMetric('--game-tray-bottom-offset', 0.12),
-        minSpacing: this.getContainerMetric('--game-tray-min-spacing', 12),
-      };
-    }
-
-    return this.getFallbackTrayMetrics(containerWidth);
-  }
-
-  private getFallbackTrayMetrics(containerWidth: number): TrayMetrics {
-    const defaults: TrayMetrics = {
-      slotMin: 60,
-      slotMax: 100,
-      availableWidthRatio: 0.9,
-      bottomOffset: 0.12,
-      minSpacing: 12,
-    };
-
-    const breakpointValues: Array<{ minWidth: number; metrics: Partial<TrayMetrics> }> = [
-      {
-        minWidth: DS.BREAKPOINTS.xxl,
-        metrics: {
-          slotMin: 100,
-          slotMax: 144,
-          availableWidthRatio: 0.72,
-          bottomOffset: 0.06,
-          minSpacing: 22,
-        },
-      },
-      {
-        minWidth: DS.BREAKPOINTS.xl,
-        metrics: {
-          slotMin: 90,
-          slotMax: 130,
-          availableWidthRatio: 0.76,
-          bottomOffset: 0.07,
-          minSpacing: 20,
-        },
-      },
-      {
-        minWidth: DS.BREAKPOINTS.lg,
-        metrics: {
-          slotMin: 80,
-          slotMax: 120,
-          availableWidthRatio: 0.8,
-          bottomOffset: 0.08,
-          minSpacing: 18,
-        },
-      },
-      {
-        minWidth: DS.BREAKPOINTS.md,
-        metrics: {
-          slotMin: 72,
-          slotMax: 112,
-          availableWidthRatio: 0.84,
-          bottomOffset: 0.09,
-          minSpacing: 16,
-        },
-      },
-      {
-        minWidth: DS.BREAKPOINTS.sm,
-        metrics: {
-          slotMin: 64,
-          slotMax: 108,
-          availableWidthRatio: 0.88,
-          bottomOffset: 0.1,
-          minSpacing: 14,
-        },
-      },
-    ];
-
-    for (const entry of breakpointValues) {
-      if (containerWidth >= entry.minWidth) {
-        return { ...defaults, ...entry.metrics };
-      }
-    }
-
-    return defaults;
+  private handleViewportChanged(): void {
+    this.positionTray();
   }
 
   /**
@@ -503,6 +366,8 @@ export class PieceTray {
    */
   destroy(): void {
     this.clear();
+    this.scene.events.off('viewport:changed', this.handleViewportChanged, this);
+    this.scene.scale.off('resize', this.onScaleResize);
     this.container.destroy();
   }
 }
@@ -514,12 +379,4 @@ interface PieceSlot {
   occupied: boolean;
   pieceId: string | null;
   background: Phaser.GameObjects.Graphics | null;
-}
-
-interface TrayMetrics {
-  slotMin: number;
-  slotMax: number;
-  availableWidthRatio: number;
-  bottomOffset: number;
-  minSpacing: number;
 }
