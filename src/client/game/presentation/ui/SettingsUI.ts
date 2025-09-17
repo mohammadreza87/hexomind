@@ -178,19 +178,19 @@ export class SettingsUI extends UIComponent {
     this.add(sectionTitle);
 
     // Current username display
-    const currentUsername = highScoreService.getUsername();
-    const isCustom = highScoreService.hasCustomUsername();
+    const initialUsername = highScoreService.getUsernameSync();
+    const initialIsCustom = highScoreService.hasCustomUsername();
 
-    this.currentUsernameText = scene.add.text(x, y + 30, currentUsername, {
+    this.currentUsernameText = scene.add.text(x, y + 30, initialUsername, {
       fontSize: this.getFontSize('lg'),
       fontFamily: this.getFontFamily('display'),
       fontStyle: '700 normal',
-      color: isCustom ? this.getColor('accents', 'indigo') : this.getColor('accents', 'grayLight')
+      color: initialIsCustom ? this.getColor('accents', 'indigo') : this.getColor('accents', 'grayLight')
     }).setOrigin(0.5);
     this.add(this.currentUsernameText);
 
     // Reddit username indicator
-    if (!isCustom) {
+    if (!initialIsCustom) {
       const redditLabel = scene.add.text(x, y + 55, '(Reddit Username)', {
         fontSize: this.getFontSize('sm'),
         fontFamily: this.getFontFamily('body'),
@@ -198,6 +198,13 @@ export class SettingsUI extends UIComponent {
       }).setOrigin(0.5);
       this.add(redditLabel);
     }
+
+    highScoreService.awaitReady().then(() => {
+      const resolvedUsername = highScoreService.getUsernameSync();
+      const resolvedIsCustom = highScoreService.hasCustomUsername();
+      this.currentUsernameText.setText(resolvedUsername);
+      this.currentUsernameText.setColor(resolvedIsCustom ? this.getColor('accents', 'indigo') : this.getColor('accents', 'grayLight'));
+    });
 
     // Username input field (hidden by default)
     this.usernameInputBg = scene.add.rectangle(
@@ -228,7 +235,7 @@ export class SettingsUI extends UIComponent {
     // Change username button
     this.changeUsernameButton = this.createActionButton(
       scene, x, y + 90,
-      isCustom ? 'CHANGE USERNAME' : 'SET CUSTOM USERNAME',
+      initialIsCustom ? 'CHANGE USERNAME' : 'SET CUSTOM USERNAME',
       this.getColor('accents', 'mint'),
       () => this.toggleUsernameEdit(scene)
     );
