@@ -69,7 +69,7 @@ vi.mock('@devvit/web/server', () => {
       expiryStore.set(key, seconds);
       return 1;
     },
-    async zcard(key: string): Promise<number> {
+    async zCard(key: string): Promise<number> {
       return sortedSets.get(key)?.size ?? 0;
     },
     async zrevrank(key: string, member: string): Promise<number | null> {
