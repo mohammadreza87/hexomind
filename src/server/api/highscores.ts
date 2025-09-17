@@ -378,7 +378,7 @@ export async function getGameStatistics(): Promise<{
  */
 export async function incrementGamesPlayed(): Promise<void> {
   try {
-    await redis.incr('stats:total_games');
+    await redis.incrBy('stats:total_games', 1);
   } catch (error) {
     console.error('Error incrementing games played:', error);
   }
