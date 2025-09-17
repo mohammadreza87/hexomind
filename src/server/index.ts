@@ -30,6 +30,27 @@ app.use(express.text());
 
 const router = express.Router();
 
+let leaderboardInitialization: Promise<void> | null = null;
+
+async function ensureLeaderboardsInitializedOnce(): Promise<void> {
+  if (!leaderboardInitialization) {
+    leaderboardInitialization = initializeLeaderboards().catch(error => {
+      leaderboardInitialization = null;
+      throw error;
+    });
+  }
+  return leaderboardInitialization;
+}
+
+router.use(async (_req, _res, next): Promise<void> => {
+  try {
+    await ensureLeaderboardsInitializedOnce();
+  } catch (error) {
+    console.error('Error ensuring leaderboards are initialized:', error);
+  }
+  next();
+});
+
 router.get<{ postId: string }, InitResponse | { status: string; message: string }>(
   '/api/init',
   async (_req, res): Promise<void> => {
@@ -400,9 +421,4 @@ const server = createServer(app);
 server.on('error', (err) => console.error(`server error; ${err.stack}`));
 server.listen(port, () => {
   console.log(`http://localhost:${port}`);
-
-  // Initialize leaderboards with dummy data on startup
-  initializeLeaderboards().catch(err =>
-    console.error('Failed to initialize leaderboards on startup:', err)
-  );
 });
