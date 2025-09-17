@@ -236,6 +236,7 @@ export class LeaderboardUI extends Phaser.GameObjects.Container {
     const errorColor = DS.getColor('accents', 'coral');
 
     try {
+      await highScoreService.waitForInitialization();
       const entries = await highScoreService.getLeaderboard(this.currentType, 10);
       this.loadingText.setVisible(false);
 
@@ -387,6 +388,7 @@ declare module '../../../services/HighScoreService' {
 // Implement getUserRank in HighScoreService
 highScoreService.getUserRank = async function(): Promise<number | null> {
   try {
+    await this.waitForInitialization();
     const username = this.getUsername();
     const response = await fetch(`/api/highscore/${username}/rank`);
     if (response.ok) {

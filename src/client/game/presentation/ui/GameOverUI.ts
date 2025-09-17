@@ -234,6 +234,7 @@ export class GameOverUI extends UIComponent {
    */
   private async getDailyRank(score: number): Promise<void> {
     try {
+      await highScoreService.waitForInitialization();
       // Submit score first
       const result = await highScoreService.submitScore(score);
 
@@ -314,6 +315,7 @@ declare module '../../../services/HighScoreService' {
 // Implement getDailyLeaderboard in HighScoreService
 highScoreService.getDailyLeaderboard = async function(): Promise<any[]> {
   try {
+    await this.waitForInitialization();
     // Get today's date for daily leaderboard
     const today = new Date().toISOString().split('T')[0];
     const response = await fetch(`/api/leaderboard?type=daily&date=${today}&limit=100`);

@@ -17,6 +17,7 @@ export class SettingsUI extends UIComponent {
   private usernameInputBg: Phaser.GameObjects.Rectangle;
   private changeUsernameButton: Phaser.GameObjects.Container;
   private usernameStatusText: Phaser.GameObjects.Text;
+  private redditUsernameLabel?: Phaser.GameObjects.Text;
 
   // Buttons
   private leaderboardButton: Phaser.GameObjects.Container;
@@ -178,26 +179,21 @@ export class SettingsUI extends UIComponent {
     this.add(sectionTitle);
 
     // Current username display
-    const currentUsername = highScoreService.getUsername();
-    const isCustom = highScoreService.hasCustomUsername();
-
-    this.currentUsernameText = scene.add.text(x, y + 30, currentUsername, {
+    this.currentUsernameText = scene.add.text(x, y + 30, 'Loading username...', {
       fontSize: this.getFontSize('lg'),
       fontFamily: this.getFontFamily('display'),
       fontStyle: '700 normal',
-      color: isCustom ? this.getColor('accents', 'indigo') : this.getColor('accents', 'grayLight')
+      color: this.getColor('accents', 'grayLight')
     }).setOrigin(0.5);
     this.add(this.currentUsernameText);
 
-    // Reddit username indicator
-    if (!isCustom) {
-      const redditLabel = scene.add.text(x, y + 55, '(Reddit Username)', {
-        fontSize: this.getFontSize('sm'),
-        fontFamily: this.getFontFamily('body'),
-        color: this.getColor('accents', 'grayMuted')
-      }).setOrigin(0.5);
-      this.add(redditLabel);
-    }
+    // Reddit username indicator (hidden until initialized)
+    this.redditUsernameLabel = scene.add.text(x, y + 55, '(Reddit Username)', {
+      fontSize: this.getFontSize('sm'),
+      fontFamily: this.getFontFamily('body'),
+      color: this.getColor('accents', 'grayMuted')
+    }).setOrigin(0.5).setVisible(false);
+    this.add(this.redditUsernameLabel);
 
     // Username input field (hidden by default)
     this.usernameInputBg = scene.add.rectangle(
@@ -228,11 +224,17 @@ export class SettingsUI extends UIComponent {
     // Change username button
     this.changeUsernameButton = this.createActionButton(
       scene, x, y + 90,
-      isCustom ? 'CHANGE USERNAME' : 'SET CUSTOM USERNAME',
+      'SET CUSTOM USERNAME',
       this.getColor('accents', 'mint'),
       () => this.toggleUsernameEdit(scene)
     );
     this.add(this.changeUsernameButton);
+
+    highScoreService.waitForInitialization()
+      .then(() => {
+        this.updateUsernameUI();
+      })
+      .catch(error => console.error('Failed to initialize username for settings UI:', error));
   }
 
   /**
@@ -420,8 +422,7 @@ export class SettingsUI extends UIComponent {
           highScoreService.setCustomUsername(username);
 
           // Update display
-          this.currentUsernameText.setText(username);
-          this.currentUsernameText.setColor(this.getColor('accents', 'indigo'));
+          this.updateUsernameUI();
 
           // Exit edit mode
           this.cancelUsernameEdit();
@@ -446,8 +447,7 @@ export class SettingsUI extends UIComponent {
       console.error('Error checking username:', error);
       // Allow setting username offline
       highScoreService.setCustomUsername(username);
-      this.currentUsernameText.setText(username);
-      this.currentUsernameText.setColor(this.getColor('accents', 'indigo'));
+      this.updateUsernameUI();
       this.cancelUsernameEdit();
 
       this.usernameStatusText.setText('✓ Username saved locally');
@@ -478,6 +478,31 @@ export class SettingsUI extends UIComponent {
 
     // Clear keyboard listeners
     this.scene.input.keyboard?.removeAllListeners();
+
+    this.updateUsernameUI();
+  }
+
+  private updateUsernameUI(): void {
+    const username = highScoreService.getUsername();
+    const isCustom = highScoreService.hasCustomUsername();
+    const redditUsername = highScoreService.getRedditUsername();
+
+    this.currentUsernameText.setText(username);
+    this.currentUsernameText.setColor(
+      isCustom ? this.getColor('accents', 'indigo') : this.getColor('accents', 'grayLight')
+    );
+
+    if (!isCustom && this.redditUsernameLabel) {
+      this.redditUsernameLabel.setText(redditUsername ? '(Reddit Username)' : '(Guest Username)');
+      this.redditUsernameLabel.setVisible(true);
+    } else {
+      this.redditUsernameLabel?.setVisible(false);
+    }
+
+    if (!this.isEditingUsername) {
+      const label = this.changeUsernameButton.getData('label') as Phaser.GameObjects.Text;
+      label.setText(isCustom ? 'CHANGE USERNAME' : 'SET CUSTOM USERNAME');
+    }
   }
 
   /**

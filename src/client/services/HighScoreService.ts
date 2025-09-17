@@ -33,6 +33,7 @@ export class HighScoreService {
   private cachedHighScore: number = 0;
   private lastSync: number = 0;
   private syncInterval: number = 60000; // Sync every minute
+  private initializationPromise: Promise<void>;
 
   static getInstance(): HighScoreService {
     if (!HighScoreService.instance) {
@@ -42,8 +43,12 @@ export class HighScoreService {
   }
 
   constructor() {
-    this.initializeUsername();
+    this.initializationPromise = this.initialize();
+  }
+
+  private async initialize(): Promise<void> {
     this.loadCachedScore();
+    await this.initializeUsername();
     this.loadCustomUsername();
   }
 
@@ -88,9 +93,6 @@ export class HighScoreService {
         }
       }
     }
-
-    // Load custom username if exists
-    this.loadCustomUsername();
 
     console.log('Final username:', this.username);
   }
@@ -161,6 +163,10 @@ export class HighScoreService {
     return this.username || 'anonymous';
   }
 
+  async waitForInitialization(): Promise<void> {
+    return this.initializationPromise;
+  }
+
   /**
    * Get Reddit username
    */
@@ -205,6 +211,8 @@ export class HighScoreService {
    * Get user's high score
    */
   async getHighScore(): Promise<number> {
+    await this.initializationPromise;
+
     // Return cached score if recent
     if (Date.now() - this.lastSync < this.syncInterval) {
       return this.cachedHighScore;
@@ -229,6 +237,7 @@ export class HighScoreService {
    * Submit a new score
    */
   async submitScore(score: number): Promise<HighScoreData> {
+    await this.initializationPromise;
     const username = this.getUsername();
 
     try {
@@ -333,7 +342,7 @@ export class HighScoreService {
     this.cachedHighScore = 0;
     this.lastSync = 0;
     this.username = null;
-    this.initializeUsername();
+    this.initializationPromise = this.initialize();
   }
 }
 
