@@ -56,7 +56,8 @@ export class BoardRenderer {
     this.themeProvider = new NeonThemeProvider();
     this.viewport = viewport;
     this.hexRenderer = new HexagonRenderer(this.themeProvider);
-    // No rotation needed - renderer already defaults to pointy-top
+    // Match the 30° runtime rotation used by board textures and piece images
+    this.hexRenderer.setRotationOffset(Math.PI / 6);
 
     this.cellBaseImages = new Map();
     this.cellFillImages = new Map();
