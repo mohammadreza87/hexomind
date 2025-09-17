@@ -34,12 +34,12 @@ vi.mock('@devvit/web/server', () => {
       stringStore.set(key, next.toString());
       return next;
     },
-    async zadd(key: string, entry: { score: number; member: string }): Promise<number> {
+    async zAdd(key: string, entry: { score: number; member: string }): Promise<number> {
       const set = ensureSortedSet(key);
       set.set(entry.member, entry.score);
       return 1;
     },
-    async zrange(
+    async zRange(
       key: string,
       start: number,
       stop: number,
@@ -69,23 +69,20 @@ vi.mock('@devvit/web/server', () => {
       expiryStore.set(key, seconds);
       return 1;
     },
-    async zcard(key: string): Promise<number> {
+    async zCard(key: string): Promise<number> {
       return sortedSets.get(key)?.size ?? 0;
     },
-    async zrevrank(key: string, member: string): Promise<number | null> {
+    async zRevRank(key: string, member: string): Promise<number | null> {
       const entries = getSortedEntries(key).sort((a, b) => b[1] - a[1]);
       const index = entries.findIndex(([name]) => name === member);
       return index === -1 ? null : index;
     },
-    async hset(key: string, values: Record<string, string>): Promise<number> {
+    async hSet(key: string, values: Record<string, string>): Promise<number> {
       const current = hashStore.get(key) ?? {};
       hashStore.set(key, { ...current, ...values });
       return 1;
     },
-    async hSet(key: string, values: Record<string, string>): Promise<number> {
-      return redis.hset(key, values);
-    },
-    async hgetall(key: string): Promise<Record<string, string>> {
+    async hGetAll(key: string): Promise<Record<string, string>> {
       const current = hashStore.get(key);
       return current ? { ...current } : {};
     },
