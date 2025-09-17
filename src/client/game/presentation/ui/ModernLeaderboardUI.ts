@@ -452,7 +452,7 @@ export class ModernLeaderboardUI extends UIComponent {
     const cached = this.entries.get(type) || leaderboardService.getCached(type);
     if (cached && cached.length > 0 && !this.isLoading.get(type)) {
       this.entries.set(type, cached);
-      this.displayEntries(cached);
+      await this.displayEntries(cached);
       return;
     }
 
@@ -481,7 +481,7 @@ export class ModernLeaderboardUI extends UIComponent {
       }
 
       this.entries.set(type, entries);
-      this.displayEntries(entries);
+      await this.displayEntries(entries);
     } catch (error) {
       console.error('Failed to load leaderboard:', error);
       this.loadingText.setVisible(false);
@@ -495,17 +495,20 @@ export class ModernLeaderboardUI extends UIComponent {
   /**
    * Display leaderboard entries
    */
-  private displayEntries(entries: LeaderboardViewEntry[]): void {
+  private async displayEntries(entries: LeaderboardViewEntry[]): Promise<void> {
     this.loadingText.setVisible(false);
     this.entriesContainer.removeAll(true);
 
     if (entries.length === 0) {
       this.emptyText.setVisible(true);
-      this.updatePlayerPosition([]);
+      await this.updatePlayerPosition([]);
       return;
     }
 
     this.emptyText.setVisible(false);
+
+    await highScoreService.waitForInitialization();
+    const currentUsername = highScoreService.getUsername();
 
     const panelWidth = this.panel.width;
     const startY = -130; // Start from top of scrollable area
@@ -518,6 +521,8 @@ export class ModernLeaderboardUI extends UIComponent {
     entries.forEach((entry, index) => {
       const row = this.createEntryRow(this.scene, entry, startY + index * spacing, panelWidth);
       this.entriesContainer.add(row);
+
+      entry.isCurrentUser = entry.username === currentUsername;
 
       // Animate in
       row.setAlpha(0);
@@ -538,7 +543,7 @@ export class ModernLeaderboardUI extends UIComponent {
     this.maxScrollY = Math.max(0, totalHeight - visibleHeight);
 
     // Update player position display
-    this.updatePlayerPosition(entries);
+    await this.updatePlayerPosition(entries);
   }
 
   /**
@@ -546,6 +551,7 @@ export class ModernLeaderboardUI extends UIComponent {
    */
   private async getCurrentUsername(): Promise<string> {
     try {
+      await highScoreService.waitForInitialization();
       // Import dynamically to avoid circular dependencies
       return await highScoreService.getUsername();
     } catch (error) {
@@ -697,7 +703,8 @@ export class ModernLeaderboardUI extends UIComponent {
     const palette = this.getPalette();
 
     try {
-      const currentUsername = await highScoreService.getUsername();
+      await highScoreService.waitForInitialization();
+      const currentUsername = highScoreService.getUsername();
       const currentScore = this.currentPlayerScore || 0;
 
       // Find player in entries

@@ -39,7 +39,7 @@ export class HighScoreService {
   private cachedHighScore: number = 0;
   private lastSync: number = 0;
   private syncInterval: number = 60000; // Sync every minute
-  private initializePromise: Promise<void>;
+  private initializationPromise: Promise<void>;
 
   static getInstance(): HighScoreService {
     if (!HighScoreService.instance) {
@@ -235,6 +235,10 @@ export class HighScoreService {
     return this.username || 'anonymous';
   }
 
+  async waitForInitialization(): Promise<void> {
+    return this.initializationPromise;
+  }
+
   /**
    * Get Reddit username
    */
@@ -344,6 +348,8 @@ export class HighScoreService {
    * Get user's high score
    */
   async getHighScore(): Promise<number> {
+    await this.initializationPromise;
+
     // Return cached score if recent
     if (Date.now() - this.lastSync < this.syncInterval) {
       return this.cachedHighScore;
@@ -369,7 +375,8 @@ export class HighScoreService {
    * Submit a new score
    */
   async submitScore(score: number): Promise<HighScoreData> {
-    const username = await this.getUsername();
+    await this.initializationPromise;
+    const username = this.getUsername();
 
     try {
       // Add timeout to prevent hanging

@@ -17,6 +17,7 @@ export class SettingsUI extends UIComponent {
   private usernameInputBg: Phaser.GameObjects.Rectangle;
   private changeUsernameButton: Phaser.GameObjects.Container;
   private usernameStatusText: Phaser.GameObjects.Text;
+  private redditUsernameLabel?: Phaser.GameObjects.Text;
 
   // Buttons
   private leaderboardButton: Phaser.GameObjects.Container;
@@ -240,6 +241,12 @@ export class SettingsUI extends UIComponent {
       () => this.toggleUsernameEdit(scene)
     );
     this.add(this.changeUsernameButton);
+
+    highScoreService.waitForInitialization()
+      .then(() => {
+        this.updateUsernameUI();
+      })
+      .catch(error => console.error('Failed to initialize username for settings UI:', error));
   }
 
   /**
@@ -456,10 +463,12 @@ export class SettingsUI extends UIComponent {
       }
     } catch (error) {
       console.error('Error checking username:', error);
+
       const result = await highScoreService.setCustomUsername(username, { offlineOnly: true });
 
       this.currentUsernameText.setText(username);
       this.currentUsernameText.setColor(this.getColor('accents', 'indigo'));
+
       this.cancelUsernameEdit();
 
       this.usernameStatusText.setText(result.message || '✓ Username saved locally');
@@ -490,6 +499,31 @@ export class SettingsUI extends UIComponent {
 
     // Clear keyboard listeners
     this.scene.input.keyboard?.removeAllListeners();
+
+    this.updateUsernameUI();
+  }
+
+  private updateUsernameUI(): void {
+    const username = highScoreService.getUsername();
+    const isCustom = highScoreService.hasCustomUsername();
+    const redditUsername = highScoreService.getRedditUsername();
+
+    this.currentUsernameText.setText(username);
+    this.currentUsernameText.setColor(
+      isCustom ? this.getColor('accents', 'indigo') : this.getColor('accents', 'grayLight')
+    );
+
+    if (!isCustom && this.redditUsernameLabel) {
+      this.redditUsernameLabel.setText(redditUsername ? '(Reddit Username)' : '(Guest Username)');
+      this.redditUsernameLabel.setVisible(true);
+    } else {
+      this.redditUsernameLabel?.setVisible(false);
+    }
+
+    if (!this.isEditingUsername) {
+      const label = this.changeUsernameButton.getData('label') as Phaser.GameObjects.Text;
+      label.setText(isCustom ? 'CHANGE USERNAME' : 'SET CUSTOM USERNAME');
+    }
   }
 
   /**
