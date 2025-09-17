@@ -469,20 +469,20 @@ export class DepthEffects {
     size: number,
     fill: boolean
   ): void {
-    // Save current transform
-    graphics.save();
-
-    // Translate to the hexagon position and rotate by 30 degrees
-    graphics.translateCanvas(x, y);
-    graphics.rotateCanvas(Math.PI / 6); // 30 degrees rotation
+    const rotation = Math.PI / 6; // 30 degrees rotation to match piece orientation
+    const cos = Math.cos(rotation);
+    const sin = Math.sin(rotation);
 
     const points: Phaser.Geom.Point[] = [];
     for (let i = 0; i < 6; i++) {
-      // Draw flat-top hexagon (will be rotated by canvas transform)
-      const angle = (Math.PI / 3) * i - Math.PI / 6;
+      const angle = (Math.PI / 3) * i - Math.PI / 6; // Base flat-top orientation
       const px = size * Math.cos(angle);
       const py = size * Math.sin(angle);
-      points.push(new Phaser.Geom.Point(px, py));
+
+      const rotatedX = px * cos - py * sin;
+      const rotatedY = px * sin + py * cos;
+
+      points.push(new Phaser.Geom.Point(x + rotatedX, y + rotatedY));
     }
 
     if (fill) {
@@ -490,9 +490,6 @@ export class DepthEffects {
     } else {
       graphics.strokePoints(points, true);
     }
-
-    // Restore transform
-    graphics.restore();
   }
 
   private getWorldPosition(gameObject: Phaser.GameObjects.GameObject): { x: number; y: number } {
