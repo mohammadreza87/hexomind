@@ -1,39 +1,43 @@
 import { describe, expect, it } from 'vitest';
-import { calculateResponsiveDimensions } from '../src/client/game/responsive';
-import { DesignSystem } from '../src/client/game/config/DesignSystem';
+import { measureResponsiveViewport } from '../src/client/game/responsive';
 
-const ASPECT_RATIO = 900 / 800;
+describe('measureResponsiveViewport', () => {
+  it('selects the portrait layout for tall mobile viewports', () => {
+    const metrics = measureResponsiveViewport(390, 844);
 
-describe('calculateResponsiveDimensions', () => {
-  it('adapts to narrow portrait viewports and reports xs breakpoint', () => {
-    const result = calculateResponsiveDimensions(360, 780);
-
-    expect(result.orientation).toBe('portrait');
-    expect(result.breakpoint).toBe('xs');
-    expect(result.width).toBe(360);
-    expect(result.height).toBe(Math.round(360 * ASPECT_RATIO));
+    expect(metrics.orientation).toBe('portrait');
+    expect(metrics.width).toBe(1080);
+    expect(metrics.height).toBe(1920);
+    expect(metrics.displayWidth).toBe(390);
+    expect(metrics.displayHeight).toBe(693);
+    expect(metrics.safeArea.width).toBeLessThan(metrics.width);
   });
 
-  it('clamps width to the xxl breakpoint for extremely wide layouts', () => {
-    const result = calculateResponsiveDimensions(2200, 2800);
+  it('chooses landscape metrics when the viewport is wider than tall', () => {
+    const metrics = measureResponsiveViewport(1280, 720);
 
-    expect(result.breakpoint).toBe('xxl');
-    expect(result.width).toBe(DesignSystem.BREAKPOINTS.xxl);
-    expect(result.height).toBe(Math.round(DesignSystem.BREAKPOINTS.xxl * ASPECT_RATIO));
+    expect(metrics.orientation).toBe('landscape');
+    expect(metrics.width).toBe(1920);
+    expect(metrics.height).toBe(1080);
+    expect(metrics.displayWidth).toBe(1280);
+    expect(metrics.displayHeight).toBe(720);
+    expect(metrics.boardArea.height).toBeLessThan(metrics.safeArea.height);
   });
 
-  it('maintains aspect ratio when height is the constraining dimension', () => {
-    const result = calculateResponsiveDimensions(1920, 1080);
+  it('clamps extremely small viewports to a safe rendering size', () => {
+    const metrics = measureResponsiveViewport(280, 400);
 
-    expect(result.orientation).toBe('landscape');
-    expect(result.height).toBe(1080);
-    expect(result.width).toBe(Math.round(1080 / ASPECT_RATIO));
+    expect(metrics.displayWidth).toBeLessThanOrEqual(320);
+    expect(metrics.displayHeight).toBeGreaterThan(0);
+    expect(metrics.scale).toBeCloseTo(metrics.displayWidth / metrics.width, 5);
+    expect(metrics.offsetX).toBeGreaterThanOrEqual(0);
   });
 
-  it('selects the expected breakpoint for medium sized tablets', () => {
-    const result = calculateResponsiveDimensions(1024, 1280);
+  it('provides a dedicated tray area beneath the board', () => {
+    const metrics = measureResponsiveViewport(1024, 1366);
 
-    expect(result.width).toBe(1024);
-    expect(result.breakpoint).toBe('lg');
+    expect(metrics.boardArea.bottom).toBeLessThan(metrics.trayArea.bottom);
+    expect(metrics.trayArea.height).toBeGreaterThan(0);
+    expect(metrics.safeArea.height).toBeGreaterThan(metrics.boardArea.height);
   });
 });
