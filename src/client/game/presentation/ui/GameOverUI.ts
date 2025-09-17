@@ -242,7 +242,7 @@ export class GameOverUI extends UIComponent {
       const dailyLeaderboard = await highScoreService.getDailyLeaderboard();
 
       // Find player's position
-      const username = highScoreService.getUsername();
+      const username = await highScoreService.getUsername();
       const position = dailyLeaderboard.findIndex(entry => entry.username === username) + 1;
 
       if (position > 0) {

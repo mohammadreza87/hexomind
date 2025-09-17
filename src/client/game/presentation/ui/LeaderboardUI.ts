@@ -256,7 +256,7 @@ export class LeaderboardUI extends Phaser.GameObjects.Container {
       // Display entries
       const startY = -(spacingXxl * 2 + spacingXl / 2);
       const entrySpacing = spacingXl + spacingXs;
-      const currentUser = highScoreService.getUsername();
+      const currentUser = await highScoreService.getUsername();
 
       entries.forEach((entry, index) => {
         const isCurrentUser = entry.username === currentUser;
@@ -389,7 +389,7 @@ declare module '../../../services/HighScoreService' {
 highScoreService.getUserRank = async function(): Promise<number | null> {
   try {
     await this.waitForInitialization();
-    const username = this.getUsername();
+    const username = await this.getUsername();
     const response = await fetch(`/api/highscore/${username}/rank`);
     if (response.ok) {
       const data = await response.json();

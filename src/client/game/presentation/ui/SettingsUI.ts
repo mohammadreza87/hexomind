@@ -179,21 +179,33 @@ export class SettingsUI extends UIComponent {
     this.add(sectionTitle);
 
     // Current username display
-    this.currentUsernameText = scene.add.text(x, y + 30, 'Loading username...', {
+    const initialUsername = highScoreService.getUsernameSync();
+    const initialIsCustom = highScoreService.hasCustomUsername();
+
+    this.currentUsernameText = scene.add.text(x, y + 30, initialUsername, {
       fontSize: this.getFontSize('lg'),
       fontFamily: this.getFontFamily('display'),
       fontStyle: '700 normal',
-      color: this.getColor('accents', 'grayLight')
+      color: initialIsCustom ? this.getColor('accents', 'indigo') : this.getColor('accents', 'grayLight')
     }).setOrigin(0.5);
     this.add(this.currentUsernameText);
 
-    // Reddit username indicator (hidden until initialized)
-    this.redditUsernameLabel = scene.add.text(x, y + 55, '(Reddit Username)', {
-      fontSize: this.getFontSize('sm'),
-      fontFamily: this.getFontFamily('body'),
-      color: this.getColor('accents', 'grayMuted')
-    }).setOrigin(0.5).setVisible(false);
-    this.add(this.redditUsernameLabel);
+    // Reddit username indicator
+    if (!initialIsCustom) {
+      const redditLabel = scene.add.text(x, y + 55, '(Reddit Username)', {
+        fontSize: this.getFontSize('sm'),
+        fontFamily: this.getFontFamily('body'),
+        color: this.getColor('accents', 'grayMuted')
+      }).setOrigin(0.5);
+      this.add(redditLabel);
+    }
+
+    highScoreService.awaitReady().then(() => {
+      const resolvedUsername = highScoreService.getUsernameSync();
+      const resolvedIsCustom = highScoreService.hasCustomUsername();
+      this.currentUsernameText.setText(resolvedUsername);
+      this.currentUsernameText.setColor(resolvedIsCustom ? this.getColor('accents', 'indigo') : this.getColor('accents', 'grayLight'));
+    });
 
     // Username input field (hidden by default)
     this.usernameInputBg = scene.add.rectangle(
@@ -224,7 +236,7 @@ export class SettingsUI extends UIComponent {
     // Change username button
     this.changeUsernameButton = this.createActionButton(
       scene, x, y + 90,
-      'SET CUSTOM USERNAME',
+      initialIsCustom ? 'CHANGE USERNAME' : 'SET CUSTOM USERNAME',
       this.getColor('accents', 'mint'),
       () => this.toggleUsernameEdit(scene)
     );
@@ -418,24 +430,30 @@ export class SettingsUI extends UIComponent {
         const data = await response.json();
 
         if (data.available) {
-          // Save the custom username
-          highScoreService.setCustomUsername(username);
+          const result = await highScoreService.setCustomUsername(username);
 
-          // Update display
-          this.updateUsernameUI();
+          if (result.success) {
+            this.currentUsernameText.setText(username);
+            this.currentUsernameText.setColor(this.getColor('accents', 'indigo'));
 
-          // Exit edit mode
-          this.cancelUsernameEdit();
+            this.cancelUsernameEdit();
 
-          // Show success
-          this.usernameStatusText.setText('✓ Username saved!');
-          this.usernameStatusText.setColor(this.getColor('accents', 'mint'));
-          this.usernameStatusText.setVisible(true);
+            if (result.offlineFallback) {
+              this.usernameStatusText.setText('✓ Username saved locally');
+              this.usernameStatusText.setColor(this.getColor('accents', 'amber'));
+            } else {
+              this.usernameStatusText.setText('✓ Username saved!');
+              this.usernameStatusText.setColor(this.getColor('accents', 'mint'));
+            }
 
-          // Hide status after 2 seconds
-          this.scene.time.delayedCall(2000, () => {
-            this.usernameStatusText.setVisible(false);
-          });
+            this.usernameStatusText.setVisible(true);
+            this.scene.time.delayedCall(2000, () => {
+              this.usernameStatusText.setVisible(false);
+            });
+          } else {
+            this.usernameStatusText.setText(result.message || 'Failed to save username');
+            this.usernameStatusText.setColor(this.getColor('accents', 'crimson'));
+          }
         } else {
           this.usernameStatusText.setText('Username already taken');
           this.usernameStatusText.setColor(this.getColor('accents', 'crimson'));
@@ -445,12 +463,15 @@ export class SettingsUI extends UIComponent {
       }
     } catch (error) {
       console.error('Error checking username:', error);
-      // Allow setting username offline
-      highScoreService.setCustomUsername(username);
-      this.updateUsernameUI();
+
+      const result = await highScoreService.setCustomUsername(username, { offlineOnly: true });
+
+      this.currentUsernameText.setText(username);
+      this.currentUsernameText.setColor(this.getColor('accents', 'indigo'));
+
       this.cancelUsernameEdit();
 
-      this.usernameStatusText.setText('✓ Username saved locally');
+      this.usernameStatusText.setText(result.message || '✓ Username saved locally');
       this.usernameStatusText.setColor(this.getColor('accents', 'amber'));
       this.usernameStatusText.setVisible(true);
 

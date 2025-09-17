@@ -442,6 +442,7 @@ export class ModernLeaderboardUI extends UIComponent {
    * Load leaderboard data
    */
   private async loadLeaderboard(type: LeaderboardType): Promise<void> {
+    await highScoreService.awaitReady();
     // Show loading state
     this.entriesContainer.removeAll(true);
     this.loadingText.setVisible(true);
@@ -552,7 +553,7 @@ export class ModernLeaderboardUI extends UIComponent {
     try {
       await highScoreService.waitForInitialization();
       // Import dynamically to avoid circular dependencies
-      return highScoreService.getUsername();
+      return await highScoreService.getUsername();
     } catch (error) {
       console.error('Failed to get username:', error);
       return 'anonymous';

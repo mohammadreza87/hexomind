@@ -25,6 +25,12 @@ export interface GameStats {
   topScore: number;
 }
 
+export interface SetCustomUsernameResult {
+  success: boolean;
+  offlineFallback: boolean;
+  message?: string;
+}
+
 export class HighScoreService {
   private static instance: HighScoreService;
   private username: string | null = null;
@@ -43,19 +49,74 @@ export class HighScoreService {
   }
 
   constructor() {
-    this.initializationPromise = this.initialize();
+    this.seedUsernameFromStorage();
+    this.loadCachedScore();
+    this.initializePromise = this.initializeUsername();
   }
 
-  private async initialize(): Promise<void> {
-    this.loadCachedScore();
-    await this.initializeUsername();
-    this.loadCustomUsername();
+  /**
+   * Seed username synchronously from local storage before async work
+   */
+  private seedUsernameFromStorage(): void {
+    this.customUsername = null;
+    this.username = null;
+
+    // Try to restore a valid custom username first
+    const storedCustom = localStorage.getItem('hexomind_custom_username');
+    if (storedCustom) {
+      try {
+        const data = JSON.parse(storedCustom);
+        if (data.username && data.timestamp) {
+          const daysSinceSet = (Date.now() - data.timestamp) / (1000 * 60 * 60 * 24);
+          if (daysSinceSet < 30) {
+            this.customUsername = data.username;
+            this.username = this.customUsername;
+            console.log('Using custom username:', this.customUsername);
+            return;
+          }
+
+          // Expired custom username
+          localStorage.removeItem('hexomind_custom_username');
+        }
+      } catch (error) {
+        console.error('Error parsing custom username:', error);
+      }
+    }
+
+    // Fall back to stored generated/Reddit username
+    const storedUsername = localStorage.getItem('hexomind_username');
+    if (storedUsername) {
+      this.username = storedUsername;
+    } else {
+      this.username = this.generateAnonymousUsername();
+      localStorage.setItem('hexomind_username', this.username);
+    }
+  }
+
+  /**
+   * Generate an anonymous username
+   */
+  private generateAnonymousUsername(): string {
+    return `player_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  /**
+   * Wait for username initialization to complete
+   */
+  async awaitReady(): Promise<void> {
+    try {
+      await this.initializePromise;
+    } catch (error) {
+      console.error('Failed to initialize HighScoreService username:', error);
+    }
   }
 
   /**
    * Initialize username from Reddit context or generate anonymous
    */
   private async initializeUsername(): Promise<void> {
+    let resolvedUsername: string | null = null;
+
     try {
       // First, try to get username from the server context
       const response = await fetch('/api/current-user');
@@ -65,30 +126,39 @@ export class HighScoreService {
 
         if (data.username) {
           this.redditUsername = data.username;
-          this.username = this.redditUsername;
-          console.log('Using Reddit username:', this.redditUsername);
+          if (!this.customUsername) {
+            this.username = this.redditUsername;
+            localStorage.setItem('hexomind_username', this.username);
+            console.log('Using Reddit username:', this.redditUsername);
         }
       }
     } catch (error) {
       console.error('Failed to get username from server:', error);
     }
 
-    // Fallback: Try URL params
-    if (!this.redditUsername) {
+    if (!resolvedUsername) {
+      const localCustom = this.readCustomUsernameFromLocal();
+      if (localCustom) {
+        this.customUsername = localCustom;
+        resolvedUsername = localCustom;
+        console.log('Using custom username from local storage:', this.customUsername);
+      }
+    }
+
+    if (!resolvedUsername) {
       const urlParams = new URLSearchParams(window.location.search);
       const redditUser = urlParams.get('username');
 
       if (redditUser) {
         this.redditUsername = redditUser;
-        this.username = this.redditUsername;
+        if (!this.customUsername) {
+          this.username = this.redditUsername;
+          localStorage.setItem('hexomind_username', this.username);
+        }
       } else {
-        // Check local storage for existing username
-        const stored = localStorage.getItem('hexomind_username');
-        if (stored) {
-          this.username = stored;
-        } else {
-          // Generate anonymous username
-          this.username = `player_${Math.random().toString(36).substr(2, 9)}`;
+        // Ensure we have a username seeded (may have been set during construction)
+        if (!this.username) {
+          this.username = this.generateAnonymousUsername();
           localStorage.setItem('hexomind_username', this.username);
         }
       }
@@ -97,35 +167,29 @@ export class HighScoreService {
     console.log('Final username:', this.username);
   }
 
-  /**
-   * Load custom username from localStorage
-   */
-  private loadCustomUsername(): void {
+  private readCustomUsernameFromLocal(): string | null {
     const stored = localStorage.getItem('hexomind_custom_username');
-    if (stored) {
-      try {
-        const data = JSON.parse(stored);
-        if (data.username && data.timestamp) {
-          // Check if custom username is still valid (not expired)
-          const daysSinceSet = (Date.now() - data.timestamp) / (1000 * 60 * 60 * 24);
-          if (daysSinceSet < 30) { // Custom username valid for 30 days
-            this.customUsername = data.username;
-            this.username = this.customUsername;
-            console.log('Using custom username:', this.customUsername);
-          } else {
-            // Expired, clear it
-            localStorage.removeItem('hexomind_custom_username');
-          }
-        }
-      } catch (error) {
-        console.error('Error loading custom username:', error);
-      }
+    if (!stored) {
+      return null;
     }
+
+    try {
+      const data = JSON.parse(stored);
+      if (data?.username && data?.timestamp) {
+        const daysSinceSet = (Date.now() - data.timestamp) / (1000 * 60 * 60 * 24);
+        if (daysSinceSet < 30) {
+          return data.username;
+        }
+
+        localStorage.removeItem('hexomind_custom_username');
+      }
+    } catch (error) {
+      console.error('Error reading custom username from local storage:', error);
+    }
+
+    return null;
   }
 
-  /**
-   * Load cached high score from localStorage as fallback
-   */
   private loadCachedScore(): void {
     try {
       const cached = localStorage.getItem('hexomind_highscore');
@@ -159,7 +223,15 @@ export class HighScoreService {
   /**
    * Get current username
    */
-  getUsername(): string {
+  async getUsername(): Promise<string> {
+    await this.awaitReady();
+    return this.username || 'anonymous';
+  }
+
+  /**
+   * Get current username without awaiting initialization
+   */
+  getUsernameSync(): string {
     return this.username || 'anonymous';
   }
 
@@ -184,17 +256,79 @@ export class HighScoreService {
   /**
    * Set custom username
    */
-  setCustomUsername(username: string): void {
-    this.customUsername = username;
-    this.username = username;
+  async setCustomUsername(
+    username: string,
+    options?: { offlineOnly?: boolean }
+  ): Promise<SetCustomUsernameResult> {
+    if (options?.offlineOnly) {
+      this.customUsername = username;
+      this.username = username;
+
+      localStorage.setItem('hexomind_custom_username', JSON.stringify({
+        username,
+        timestamp: Date.now()
+      }));
+      localStorage.setItem('hexomind_username', username);
 
     // Save to localStorage
     localStorage.setItem('hexomind_custom_username', JSON.stringify({
       username: username,
       timestamp: Date.now()
     }));
+    localStorage.setItem('hexomind_username', username);
 
-    console.log('Custom username set:', username);
+    try {
+      const response = await fetch('/api/commit-username', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const message = typeof errorData?.error === 'string'
+          ? errorData.error
+          : 'Failed to save username';
+        return { success: false, offlineFallback: false, message };
+      }
+
+      const data = await response.json();
+      if (!data?.success) {
+        const message = typeof data?.error === 'string'
+          ? data.error
+          : 'Failed to save username';
+        return { success: false, offlineFallback: false, message };
+      }
+
+      this.customUsername = data.username || username;
+      this.username = this.customUsername;
+
+      localStorage.setItem('hexomind_custom_username', JSON.stringify({
+        username: this.customUsername,
+        timestamp: Date.now()
+      }));
+      localStorage.setItem('hexomind_username', this.customUsername);
+
+      console.log('Custom username saved on server:', this.customUsername);
+      return { success: true, offlineFallback: false };
+    } catch (error) {
+      console.error('Error saving custom username to server:', error);
+
+      this.customUsername = username;
+      this.username = username;
+
+      localStorage.setItem('hexomind_custom_username', JSON.stringify({
+        username,
+        timestamp: Date.now()
+      }));
+      localStorage.setItem('hexomind_username', username);
+
+      return {
+        success: true,
+        offlineFallback: true,
+        message: 'Username saved locally'
+      };
+    }
   }
 
   /**
@@ -202,8 +336,11 @@ export class HighScoreService {
    */
   clearCustomUsername(): void {
     this.customUsername = null;
-    this.username = this.redditUsername || `player_${Math.random().toString(36).substr(2, 9)}`;
+    this.username = this.redditUsername || this.generateAnonymousUsername();
     localStorage.removeItem('hexomind_custom_username');
+    if (this.username) {
+      localStorage.setItem('hexomind_username', this.username);
+    }
     console.log('Reverted to username:', this.username);
   }
 
@@ -219,7 +356,8 @@ export class HighScoreService {
     }
 
     try {
-      const response = await fetch(`/api/highscore/${this.getUsername()}`);
+      const username = await this.getUsername();
+      const response = await fetch(`/api/highscore/${username}`);
       if (response.ok) {
         const data = await response.json();
         this.cachedHighScore = data.score || 0;
@@ -342,7 +480,8 @@ export class HighScoreService {
     this.cachedHighScore = 0;
     this.lastSync = 0;
     this.username = null;
-    this.initializationPromise = this.initialize();
+    this.seedUsernameFromStorage();
+    this.initializePromise = this.initializeUsername();
   }
 }
 
