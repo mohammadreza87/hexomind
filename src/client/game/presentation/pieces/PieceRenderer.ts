@@ -116,6 +116,8 @@ export class PieceRenderer {
       // Apply 30° rotation for correct orientation
       img.setRotation(Math.PI / 6);
       img.setTint(pieceColor);
+
+      img.setAlpha(1);
       this.container.add(img);
       this.hexagons.push(img);
 

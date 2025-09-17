@@ -1,3 +1,5 @@
+import { leaderboardService } from './LeaderboardService';
+
 /**
  * Client-side high score service
  * Manages high scores using Reddit KV storage via API
@@ -456,6 +458,9 @@ export class HighScoreService {
           this.saveCachedScore(score);
         }
 
+        // Always invalidate client-side leaderboard caches so refreshed data is fetched
+        leaderboardService.clearCache();
+
         return {
           username,
           score,
@@ -477,6 +482,8 @@ export class HighScoreService {
     if (isHighScore) {
       this.saveCachedScore(score);
     }
+
+    leaderboardService.clearCache();
 
     return {
       username,

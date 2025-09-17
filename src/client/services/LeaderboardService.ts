@@ -108,6 +108,14 @@ class LeaderboardService {
     return this.cache.get(period) ?? null;
   }
 
+  clearCache(period?: LeaderboardViewPeriod): void {
+    if (period) {
+      this.cache.delete(period);
+    } else {
+      this.cache.clear();
+    }
+  }
+
   async fetchLeaderboard(
     period: LeaderboardViewPeriod,
     limit: number,

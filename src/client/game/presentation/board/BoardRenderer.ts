@@ -46,6 +46,7 @@ export class BoardRenderer {
 
   // Preview state
   private previewGraphics: Phaser.GameObjects.Graphics;
+  private previewHexRenderer: HexagonRenderer;
   private linePreviewContainer: Phaser.GameObjects.Container;
   private linePreviewGraphics: Phaser.GameObjects.Graphics[];
   private depthEffects: DepthEffects;
@@ -58,6 +59,11 @@ export class BoardRenderer {
     this.hexRenderer = new HexagonRenderer(this.themeProvider);
     this.hexRenderer.setOrientation('flat');
     this.hexRenderer.setRotationOffset(0);
+
+    // Create a separate renderer for preview with rotation to match piece images
+    this.previewHexRenderer = new HexagonRenderer(this.themeProvider);
+    this.previewHexRenderer.setOrientation('flat');
+    this.previewHexRenderer.setRotationOffset(Math.PI / 6);
 
     this.cellBaseImages = new Map();
     this.cellFillImages = new Map();
@@ -566,7 +572,7 @@ export class BoardRenderer {
     const py = position.y;
 
       // Draw preview hexagon with proper spacing and piece color
-      this.hexRenderer.drawHexagon(
+      this.previewHexRenderer.drawHexagon(
         this.previewGraphics,
         px,
         py,
@@ -580,7 +586,7 @@ export class BoardRenderer {
       if (isValid) {
         // No glow - use subtle outline instead
         this.previewGraphics.lineStyle(3, previewColor, 0.6);
-        this.hexRenderer.drawHexagonOutline(
+        this.previewHexRenderer.drawHexagonOutline(
           this.previewGraphics,
           position.x,
           position.y,
@@ -589,7 +595,7 @@ export class BoardRenderer {
       } else {
         // Red outline for invalid placement
         this.previewGraphics.lineStyle(2, theme.cellInvalid, 0.4);
-        this.hexRenderer.drawHexagonOutline(
+        this.previewHexRenderer.drawHexagonOutline(
           this.previewGraphics,
           position.x,
           position.y,
@@ -639,7 +645,8 @@ export class BoardRenderer {
             // Fill the hexagon completely with the piece color (full opacity)
             hexGraphics.fillStyle(linePreviewColor, 1.0); // Full opacity
 
-            const points = this.hexRenderer.getHexPoints(this.hexSize - this.hexSpacing);
+            // Use the preview renderer with rotation to match piece images
+            const points = this.previewHexRenderer.getHexPoints(this.hexSize - this.hexSpacing);
 
             hexGraphics.beginPath();
             hexGraphics.moveTo(px + points[0].x, py + points[0].y);
@@ -731,30 +738,91 @@ export class BoardRenderer {
    */
   animateLineClear(lines: { cells: HexCoordinates[] }[]): Promise<void> {
     return new Promise(resolve => {
-      if (!lines || lines.length === 0) { resolve(); return; }
+      if (!lines || lines.length === 0) {
+        resolve();
+        return;
+      }
 
-      // Just immediately clear cells without any animation
+      const tweens: Phaser.Tweens.Tween[] = [];
+      let pending = 0;
+      const baseDelay = 50; // milliseconds
+
       lines.forEach((line) => {
-        line.cells.forEach((c) => {
-          const key = hexToKey(c);
-          const img = this.cellFillImages.get(key);
-          if (img) {
-            // Update model
-            this.gridModel.setCellOccupied(c, false);
+        const ordered = [...line.cells].sort((a, b) => {
+          const posA = this.hexToPixelInternal(a);
+          const posB = this.hexToPixelInternal(b);
+          return posA.x - posB.x;
+        });
 
-            // Reset visual immediately
-            const radius = this.hexSize - this.hexSpacing;
-            const dim = radius * 2;
-            img.setVisible(false);
-            img.setScale(1);
-            img.setDisplaySize(dim - 2, dim - 2);
-            img.setAlpha(1);
+        ordered.forEach((coord, index) => {
+          const key = hexToKey(coord);
+          const fill = this.cellFillImages.get(key);
+          if (!fill) {
+            this.gridModel.setCellOccupied(coord, false);
+            return;
           }
+
+          const delay = index * baseDelay + Phaser.Math.Between(0, 25);
+          pending++;
+
+          const originalTint = fill.tintTopLeft ?? 0xffffff;
+
+          tweens.push(this.scene.tweens.add({
+            targets: fill,
+            scale: 0,
+            alpha: 0,
+            duration: 180,
+            delay,
+            ease: 'Quad.easeIn',
+            onStart: () => {
+              this.spawnHexClearParticle(coord, originalTint);
+            },
+            onComplete: () => {
+              this.gridModel.setCellOccupied(coord, false);
+              fill.setVisible(false);
+              const radius = this.hexSize - this.hexSpacing;
+              const dim = radius * 2;
+              fill.setScale(1);
+              fill.setDisplaySize(dim - 2, dim - 2);
+              fill.setAlpha(1);
+              pending--;
+
+              if (pending === 0) {
+                this.updateBoard();
+                resolve();
+              }
+            }
+          }));
         });
       });
 
-      this.updateBoard();
-      resolve();
+      if (pending === 0) {
+        this.updateBoard();
+        resolve();
+      } else {
+        // Much softer camera shake - reduced intensity by ~70%
+        const intensity = 0.003 + 0.001 * lines.length;
+        const duration = 150 + lines.length * 30;
+        this.scene.cameras.main.shake(duration, intensity, true);
+      }
+    });
+  }
+
+  private spawnHexClearParticle(coord: HexCoordinates, tint: number): void {
+    const position = this.hexToPixelInternal(coord);
+    const particle = this.scene.add.circle(position.x, position.y, (this.hexSize - this.hexSpacing) * 0.4, tint, 0.5);
+    particle.setDepth(this.boardContainer.depth + 1);
+    this.cellsContainer.add(particle);
+
+    this.scene.tweens.add({
+      targets: particle,
+      scale: { from: 0.4, to: 1.2 },
+      alpha: { from: 0.5, to: 0 },
+      duration: 220,
+      ease: 'Cubic.easeOut',
+      onComplete: () => {
+        particle.destroy();
+      }
     });
   }
 

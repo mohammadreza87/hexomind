@@ -318,7 +318,14 @@ highScoreService.getDailyLeaderboard = async function(): Promise<any[]> {
     await this.waitForInitialization();
     // Get today's date for daily leaderboard
     const today = new Date().toISOString().split('T')[0];
-    const response = await fetch(`/api/leaderboard?type=daily&date=${today}&limit=100`);
+    const username = await this.getUsername();
+    const params = new URLSearchParams({
+      type: 'daily',
+      date: today,
+      limit: '100',
+      username
+    });
+    const response = await fetch(`/api/leaderboard?${params.toString()}`);
     if (response.ok) {
       const data = await response.json();
       return data.leaderboard || [];

@@ -99,11 +99,18 @@ export const LeaderboardPanel: React.FC = () => {
         onClick={handleClose}
       />
 
-      {/* Panel with better width control */}
+      {/* Panel with stronger glassmorphism */}
       <div className="leaderboard-panel relative w-full max-w-md">
-        {/* Glass panel with gradient border */}
+        {/* Glass panel with gradient background */}
         <div className="relative rounded-2xl">
-          <div className="relative bg-gray-900/90 backdrop-blur-xl rounded-2xl shadow-2xl">
+          {/* Glassmorphism layer */}
+          <div className="relative rounded-2xl shadow-2xl"
+               style={{
+                 backdropFilter: 'blur(12px) saturate(115%)',
+                 WebkitBackdropFilter: 'blur(12px) saturate(115%)',
+                 backgroundColor: 'rgba(17, 25, 40, 0.36)',
+                 border: '1px solid rgba(255, 255, 255, 0.125)'
+               }}>
             {/* Close button */}
             <button
               onClick={handleClose}

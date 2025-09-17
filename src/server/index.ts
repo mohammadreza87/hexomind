@@ -379,8 +379,8 @@ router.post('/api/highscore', async (req, res): Promise<void> => {
         // Ensure player appears in all leaderboards using their best score
         await ensurePlayerInLeaderboard(username, authoritativeScore);
 
-        // Fire and forget for non-critical updates to avoid blocking
-        Promise.all([
+        // Ensure leaderboard mirrors are updated before responding
+        await Promise.all([
           updateDailyLeaderboard(username, authoritativeScore).catch(err =>
             console.error('Failed to update daily leaderboard:', err)
           ),

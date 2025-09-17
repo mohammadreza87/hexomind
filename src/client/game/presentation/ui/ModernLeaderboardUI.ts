@@ -566,6 +566,11 @@ export class ModernLeaderboardUI extends UIComponent {
   async show(newScore?: number): Promise<void> {
     if (this.isVisible) return;
 
+    if (newScore !== undefined) {
+      this.entries.clear();
+      leaderboardService.clearCache();
+    }
+
     // Store the current player score for rank calculation
     if (newScore !== undefined) {
       this.currentPlayerScore = newScore;
@@ -577,28 +582,6 @@ export class ModernLeaderboardUI extends UIComponent {
         console.error('Failed to get player score:', error);
         this.currentPlayerScore = 0;
       }
-    }
-
-    // If a new score is provided, update the cached data
-    if (newScore !== undefined) {
-      const currentUsername = await this.getCurrentUsername();
-
-      // Update each cached leaderboard with the new score
-      ['daily', 'weekly', 'global'].forEach(type => {
-        const cached = this.entries.get(type as LeaderboardType);
-        if (cached) {
-          // Find and update current user's score
-          const userEntry = cached.find(e => e.isCurrentUser);
-          if (userEntry && newScore > userEntry.score) {
-            userEntry.score = newScore;
-            // Re-sort and re-rank
-            cached.sort((a, b) => b.score - a.score);
-            cached.forEach((entry, index) => {
-              entry.rank = index + 1;
-            });
-          }
-        }
-      });
     }
 
     this.isVisible = true;
