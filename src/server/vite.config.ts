@@ -9,6 +9,10 @@ export default defineConfig({
     ssr: 'index.ts',
     outDir: '../../dist/server',
     target: 'node22',
+    minify: false,
+    esbuild: {
+      keepNames: true,
+    },
     sourcemap: true,
     rollupOptions: {
       external: [...builtinModules],
