@@ -45,19 +45,11 @@ const buildGameConfig = (
   backgroundColor: '#1a1a1b', // Reddit dark mode default
   resolution,
   scale: {
-    mode: Phaser.Scale.FIT, // Fit the fixed size to container
-    autoCenter: Phaser.Scale.CENTER_BOTH,
-    width: metrics.width,
-    height: metrics.height,
-    parent,
-    min: {
-      width: 540,
-      height: 960
-    },
-    max: {
-      width: 2560,
-      height: 2560
-    }
+    mode: Phaser.Scale.NONE, // No scaling, fixed size
+    autoCenter: Phaser.Scale.NO_CENTER, // We'll handle centering via CSS
+    width: 1080,
+    height: 1920,
+    parent
   },
   scene: [MainScene],
   physics: {
@@ -122,8 +114,8 @@ const applyContainerMetrics = (element: HTMLElement | null, metrics: ResponsiveM
 };
 
 const StartGame = (parent: string) => {
-  const viewport = getViewportSize(parent);
-  let metrics = measureResponsiveViewport(viewport.width, viewport.height);
+  // Use fixed 1080x1920 dimensions for the game
+  let metrics = measureResponsiveViewport(1080, 1920);
   const config = buildGameConfig(parent, metrics, getDevicePixelRatio());
 
   const game = new Phaser.Game(config);
@@ -139,10 +131,10 @@ const StartGame = (parent: string) => {
 
   if (typeof window !== 'undefined') {
     const updateSize = () => {
-      const latest = getViewportSize(parent);
-      metrics = measureResponsiveViewport(latest.width, latest.height);
+      // Always use fixed 1080x1920 dimensions
+      metrics = measureResponsiveViewport(1080, 1920);
       applyContainerMetrics(containerElement, metrics);
-      game.scale.resize(metrics.width, metrics.height);
+      // Don't resize the game, keep it at 1080x1920
       publishMetrics(metrics);
     };
 
@@ -164,6 +156,11 @@ const StartGame = (parent: string) => {
       game.scale.off(Phaser.Scale.Events.ORIENTATION_CHANGE, updateSize);
       window.removeEventListener('orientationchange', orientationHandler);
     });
+  }
+
+  // Expose game instance globally for React integration
+  if (typeof window !== 'undefined') {
+    window.game = game;
   }
 
   return game;

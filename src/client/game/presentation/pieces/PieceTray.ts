@@ -71,29 +71,33 @@ export class PieceTray {
   public updateLayout(metrics: ResponsiveMetrics): void {
     this.metrics = metrics;
 
-    const trayArea = metrics.trayArea;
-    const availableWidth = trayArea.width;
-    const availableHeight = trayArea.height;
+    // For fixed 1080x1920 viewport, position tray at bottom
+    const gameWidth = 1080;
+    const gameHeight = 1920;
 
+    // Position tray at the bottom of screen
+    const trayY = gameHeight - 200; // Fixed position from bottom
+    const availableWidth = gameWidth * 0.9; // Use 90% of width
+
+    // Calculate slot size based on available width
     const widthLimitedSlot = availableWidth / this.SLOT_COUNT;
-    const heightLimitedSlot = availableHeight * 0.85;
-    const slotBase = Math.min(widthLimitedSlot, heightLimitedSlot);
-    const orientationScale = metrics.orientation === 'portrait' ? 0.95 : 0.85;
+    const slotBase = widthLimitedSlot * 0.8; // Leave space between slots
 
-    const minSlot = metrics.orientation === 'portrait' ? 90 : 80;
-    const maxSlot = metrics.orientation === 'portrait' ? 180 : 150;
+    // Set reasonable bounds for slot size
+    const minSlot = 100;
+    const maxSlot = 150;
 
-    this.slotSize = Phaser.Math.Clamp(slotBase * orientationScale, minSlot, maxSlot);
+    this.slotSize = Phaser.Math.Clamp(slotBase, minSlot, maxSlot);
 
-    const gapCount = Math.max(this.SLOT_COUNT - 1, 1);
+    // Calculate spacing between slots
     const occupiedWidth = this.slotSize * this.SLOT_COUNT;
-    const remainingWidth = Math.max(availableWidth - occupiedWidth, 0);
-    const minSpacing = this.slotSize * 0.2;
-    this.slotSpacing = Math.max(remainingWidth / gapCount, minSpacing);
+    const remainingWidth = availableWidth - occupiedWidth;
+    this.slotSpacing = remainingWidth / (this.SLOT_COUNT - 1);
 
+    // Center the tray horizontally
     const totalWidth = occupiedWidth + this.slotSpacing * (this.SLOT_COUNT - 1);
-    const startX = trayArea.x + (trayArea.width - totalWidth) / 2 + this.slotSize / 2;
-    this.trayYPosition = trayArea.y + trayArea.height / 2;
+    const startX = (gameWidth - totalWidth) / 2 + this.slotSize / 2;
+    this.trayYPosition = trayY;
 
     this.pieceSlots.forEach((slot, index) => {
       slot.x = startX + index * (this.slotSize + this.slotSpacing);

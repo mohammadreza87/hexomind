@@ -136,8 +136,9 @@ export class DepthEffects {
     const opacity = this.prefersReducedMotion ? 0.12 : 0.22;
     shadow.fillStyle(0x000000, opacity);
 
+    // Adjust shadow offset for rotated hexagons (30 degree rotation)
     const offsetX = hexSize * 0.08;
-    const offsetY = hexSize * 0.18;
+    const offsetY = hexSize * 0.10;
     const scale = hexSize * 0.96;
 
     offsets.forEach((point) => {
@@ -468,11 +469,19 @@ export class DepthEffects {
     size: number,
     fill: boolean
   ): void {
+    // Save current transform
+    graphics.save();
+
+    // Translate to the hexagon position and rotate by 30 degrees
+    graphics.translateCanvas(x, y);
+    graphics.rotateCanvas(Math.PI / 6); // 30 degrees rotation
+
     const points: Phaser.Geom.Point[] = [];
     for (let i = 0; i < 6; i++) {
+      // Draw flat-top hexagon (will be rotated by canvas transform)
       const angle = (Math.PI / 3) * i - Math.PI / 6;
-      const px = x + size * Math.cos(angle);
-      const py = y + size * Math.sin(angle);
+      const px = size * Math.cos(angle);
+      const py = size * Math.sin(angle);
       points.push(new Phaser.Geom.Point(px, py));
     }
 
@@ -481,6 +490,9 @@ export class DepthEffects {
     } else {
       graphics.strokePoints(points, true);
     }
+
+    // Restore transform
+    graphics.restore();
   }
 
   private getWorldPosition(gameObject: Phaser.GameObjects.GameObject): { x: number; y: number } {

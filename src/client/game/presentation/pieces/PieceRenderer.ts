@@ -38,10 +38,10 @@ export class PieceRenderer {
 
     // Calculate normal size for board (matching board hexagon size)
     // Should match the board's hex size calculation
-    this.normalHexSize = 70; // Good size for 1080p board
+    this.normalHexSize = 80; // Match the much bigger board hexagons
 
     // Base hex size for tray - will be adjusted if piece is too large
-    this.hexSize = 25; // Good starting size for tray pieces
+    this.hexSize = 32; // Bigger for better visibility in tray
     this.originalHexSize = this.hexSize; // Store original for later
 
     // Create container - depth will be managed by parent

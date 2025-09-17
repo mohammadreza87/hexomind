@@ -13,14 +13,13 @@ import { errorBoundary } from '../../utils/ErrorBoundary';
 import { highScoreService } from '../../services/HighScoreService';
 import { LeaderboardUI } from '../presentation/ui/LeaderboardUI';
 import { ModernLeaderboardUI } from '../presentation/ui/ModernLeaderboardUI';
-import { SettingsUI } from '../presentation/ui/SettingsUI';
-import { GameOverUI } from '../presentation/ui/GameOverUI';
 import { ToastUI } from '../presentation/ui/ToastUI';
 import { SharpText } from '../utils/SharpText';
 import { DS } from '../config/DesignSystem';
 import { createGradientText } from '../presentation/ui/GradientText';
 import { GameStateManager } from '../services/GameStateManager';
 import { ResponsiveMetrics, measureResponsiveViewport } from '../responsive';
+import { gameBridge } from '../../ui/GameBridge';
 // Asset URLs (bundled by Vite) - commented out for now since SVG not available
 // import hexSvgUrl from '../../assets/images/hex.svg';
 
@@ -39,11 +38,8 @@ export class MainScene extends Phaser.Scene {
   // UI Elements
   private scoreText!: Phaser.GameObjects.Text;
   private highScoreText!: Phaser.GameObjects.Text;
-  private settingsButton!: Phaser.GameObjects.Container;
-  private settingsUI!: SettingsUI;
   private leaderboardUI!: LeaderboardUI;
   private modernLeaderboardUI!: ModernLeaderboardUI;
-  private gameOverUI!: GameOverUI;
   private toast!: ToastUI;
   private responsiveMetrics!: ResponsiveMetrics;
 
@@ -200,18 +196,13 @@ export class MainScene extends Phaser.Scene {
   }
 
   private layoutUIForViewport(metrics: ResponsiveMetrics): void {
-    const { width, height } = metrics;
-    const camera = this.cameras.main;
-
-    camera.setSize(width, height);
+    // Use fixed 1080x1920 dimensions
+    const width = 1080;
+    const height = 1920;
 
     if (this.scoreText && this.highScoreText) {
-      this.scoreText.setPosition(width / 2, DS.SPACING.xl);
-      this.highScoreText.setPosition(width / 2, this.scoreText.y + this.scoreText.height + DS.SPACING.sm);
-    }
-
-    if (this.settingsButton) {
-      this.settingsButton.setPosition(width - DS.SPACING.xl, DS.SPACING.xl);
+      this.scoreText.setPosition(width / 2, 100);
+      this.highScoreText.setPosition(width / 2, 150);
     }
   }
 
@@ -276,86 +267,13 @@ export class MainScene extends Phaser.Scene {
     // Create empty text to prevent null reference errors
     this.highScoreText = this.add.text(0, 0, '', {}).setVisible(false);
 
-    // Settings button - modern styled button
-    this.createSettingsButton(width - DS.SPACING.xl, DS.SPACING.xl);
-
-    // Create settings UI (initially hidden)
-    this.settingsUI = new SettingsUI(this);
-    this.settingsUI.on('showLeaderboard', () => {
-      this.modernLeaderboardUI.show(this.score);
-    });
-    this.settingsUI.on('resetGame', () => {
-      this.resetGame();
-      localStorage.removeItem('hexomind_gamestate');
-      localStorage.removeItem('hexomind_highscore');
-      this.score = 0;
-      this.highScore = 0;
-      this.scoreText.setText(`Score: 0`);
-      this.highScoreText.setText(`Best: 0`);
-    });
-
     // Create modern leaderboard UI (initially hidden)
     this.modernLeaderboardUI = new ModernLeaderboardUI(this);
 
     // Keep old leaderboard for compatibility
     this.leaderboardUI = new LeaderboardUI(this);
 
-    // Create game over UI with modern design (initially hidden)
-    this.gameOverUI = new GameOverUI(this);
-    this.gameOverUI.on('showLeaderboard', () => {
-      this.modernLeaderboardUI.show(this.score);
-    });
-    this.gameOverUI.on('tryAgain', () => {
-      this.resetGame();
-    });
-  }
-
-  /**
-   * Create settings button
-   */
-  private createSettingsButton(x: number, y: number): void {
-    this.settingsButton = this.add.container(x, y);
-
-    // Button background
-    const bg = this.add.rectangle(0, 0, 120, 36,
-      DS.hexToNumber(DS.COLORS.glass.background), 0.9
-    );
-    bg.setStrokeStyle(1, DS.hexToNumber(DS.COLORS.glass.border), 0.5);
-    bg.setInteractive();
-
-    // Settings icon
-    const icon = this.add.text(-35, 0, '⚙️', {
-      fontSize: '20px',
-      fontFamily: DS.TYPOGRAPHY.fontFamily.body
-    }).setOrigin(0.5);
-
-    // Text
-    const text = this.add.text(10, 0, 'Settings', {
-      fontSize: DS.TYPOGRAPHY.fontSize.sm,
-      fontFamily: DS.TYPOGRAPHY.fontFamily.display,
-      fontStyle: '600 normal',
-      color: DS.COLORS.solid.info
-    }).setOrigin(0.5);
-
-    this.settingsButton.add([bg, icon, text]);
-    this.settingsButton.setDepth(DS.LAYERS.ui);
-
-    // Interactions
-    bg.on('pointerover', () => {
-      bg.setScale(1.05);
-      bg.setAlpha(1);
-      this.input.setDefaultCursor('pointer');
-    });
-
-    bg.on('pointerout', () => {
-      bg.setScale(1);
-      bg.setAlpha(0.9);
-      this.input.setDefaultCursor('default');
-    });
-
-    bg.on('pointerdown', () => {
-      this.settingsUI.show();
-    });
+    // Game over UI is now handled by React component
   }
 
   /**
@@ -403,9 +321,9 @@ export class MainScene extends Phaser.Scene {
   }
 
   /**
-   * Start a new game
+   * Start a new game (also called from React)
    */
-  private startNewGame(): void {
+  public startNewGame(): void {
     // Reset score and move count
     this.score = 0;
     this.moveCount = 0;
@@ -611,11 +529,15 @@ export class MainScene extends Phaser.Scene {
     GameStateManager.clearGameState();
     console.log('Game over - cleared saved game state');
 
-    // Don't clear remaining pieces - let player see what was left
-    // Show 'no more space' toast first, then the panel
-    this.toast
-      .show('No more space', { type: 'important' })
-      .then(() => this.gameOverUI.show(this.score, this.highScore));
+    // Update React store to show game over panel
+    if (window.gameStore) {
+      window.gameStore.getState().setGameState('gameOver');
+      window.gameStore.getState().setScore(this.score);
+      window.gameStore.getState().setHighScore(this.highScore);
+    }
+
+    // Show 'no more space' toast
+    this.toast.show('No more space', { type: 'important' });
   }
 
   /**
@@ -816,8 +738,16 @@ export class MainScene extends Phaser.Scene {
     const comboMultiplier = lines.length > 1 ? lines.length : 1;
     const totalPoints = basePoints * comboMultiplier;
 
+    // Update combo in React UI
+    gameBridge.updateCombo(lines.length);
+
     // Update score
     this.updateScore(totalPoints);
+
+    // Clear combo after a delay
+    this.time.delayedCall(2000, () => {
+      gameBridge.updateCombo(0);
+    });
 
     // Add camera shake effect based on lines cleared
     const shakeIntensity = 0.003 + (lines.length * 0.002);
@@ -849,10 +779,16 @@ export class MainScene extends Phaser.Scene {
     this.score += points;
     this.scoreText.setText(`Score: ${this.score.toLocaleString()}`);
 
+    // Update React UI
+    gameBridge.updateScore(this.score);
+
     // Update high score if needed
     if (this.score > this.highScore) {
       this.highScore = this.score;
       this.highScoreText.setText(`Best: ${this.highScore.toLocaleString()}`);
+
+      // Update React UI
+      gameBridge.updateHighScore(this.highScore);
 
       // Submit to Reddit KV storage
       try {

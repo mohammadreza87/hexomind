@@ -56,8 +56,7 @@ export class BoardRenderer {
     this.themeProvider = new NeonThemeProvider();
     this.viewport = viewport;
     this.hexRenderer = new HexagonRenderer(this.themeProvider);
-    // Ensure each grid cell is rotated by 30 degrees for pointy-top look
-    this.hexRenderer.setRotationOffset(Math.PI / 6);
+    // No rotation needed - renderer already defaults to pointy-top
 
     this.cellBaseImages = new Map();
     this.cellFillImages = new Map();
@@ -111,17 +110,27 @@ export class BoardRenderer {
    * Calculate optimal hexagon size for viewport
    */
   private calculateOptimalSize(): void {
-    const boardArea = this.viewport.boardArea;
+    // For fixed 1080x1920 viewport, calculate optimal hex size
+    const gameWidth = 1080;
+    const gameHeight = 1920;
 
-    const gridWidth = 7;
-    const gridHeight = 7;
+    // Board radius is 4, so we need to fit 9 cells horizontally and vertically at max
+    const gridWidth = 8.5;  // Slightly less to make hexagons bigger
+    const gridHeight = 8.5; // Slightly less to make hexagons bigger
 
-    const sizeByWidth = boardArea.width / (Math.sqrt(3) * gridWidth);
-    const sizeByHeight = boardArea.height / (1.5 * gridHeight);
+    // Use 95% of width for the board for much bigger hexagons
+    const availableWidth = gameWidth * 0.95;
+    // Use about 45% of height for the board area
+    const availableHeight = gameHeight * 0.45;
+
+    const sizeByWidth = availableWidth / (Math.sqrt(3) * gridWidth);
+    const sizeByHeight = availableHeight / (1.5 * gridHeight);
 
     const baseSize = Math.min(sizeByWidth, sizeByHeight);
-    const minSize = this.viewport.orientation === 'portrait' ? 44 : 38;
-    const maxSize = this.viewport.orientation === 'portrait' ? 96 : 88;
+
+    // Significantly increase hex size bounds for much bigger grid
+    const minSize = 70;
+    const maxSize = 90;
 
     this.hexSize = Phaser.Math.Clamp(baseSize, minSize, maxSize);
     this.hexSpacing = this.hexSize * 0.08;
@@ -159,10 +168,10 @@ export class BoardRenderer {
     const dim = radius * 2;
     const base = this.scene.add.image(position.x, position.y, RenderConfig.TEXTURE_KEYS.HEX_BASE_SVG).setOrigin(0.5);
     base.setDisplaySize(dim, dim);
-    base.setRotation(Math.PI / 6);
+    // No rotation - images should already be in correct orientation
     const fill = this.scene.add.image(position.x, position.y, RenderConfig.TEXTURE_KEYS.HEX_FILL_SVG).setOrigin(0.5);
     fill.setDisplaySize(dim - 2, dim - 2);
-    fill.setRotation(Math.PI / 6);
+    // No rotation - images should already be in correct orientation
     fill.setVisible(false);
 
     // Create interactive zone
@@ -259,8 +268,10 @@ export class BoardRenderer {
     const dim = radius * 2;
     base.setScale(1);
     base.setDisplaySize(dim, dim);
+    base.setRotation(Math.PI / 6);  // 30 degree rotation for flat-top to pointy-top
     fill.setScale(1);
     fill.setDisplaySize(dim - 2, dim - 2);
+    fill.setRotation(Math.PI / 6);  // 30 degree rotation for flat-top to pointy-top
 
     // Base tint (grid)
     const isAlt = (coords.q + coords.r) % 2 === 0;
@@ -296,7 +307,8 @@ export class BoardRenderer {
    * Convert hex coordinates to pixel position (private internal version)
    */
   private hexToPixelInternal(hex: HexCoordinates): Phaser.Math.Vector2 {
-    const size = this.hexSize + this.hexSpacing;
+    const size = this.hexSize;
+    // Flat-top hexagon formula with rotation
     const x = size * Math.sqrt(3) * (hex.q + hex.r / 2);
     const y = size * 1.5 * hex.r;
 
@@ -311,11 +323,11 @@ export class BoardRenderer {
     const localX = x - this.boardContainer.x;
     const localY = y - this.boardContainer.y;
 
-    const size = this.hexSize + this.hexSpacing;
+    const size = this.hexSize;
 
-    // Approximate hex coordinates
-    const q = (localX * Math.sqrt(3) / 3 - localY / 3) / size;
-    const r = (localY * 2 / 3) / size;
+    // For pointy-top hexagons:
+    const q = (Math.sqrt(3) / 3 * localX - 1 / 3 * localY) / size;
+    const r = (2 / 3 * localY) / size;
 
     // Round to nearest hex
     return this.roundToNearestHex(q, r);
@@ -363,8 +375,15 @@ export class BoardRenderer {
    * Center the board on screen
    */
   private centerBoard(): void {
-    const boardArea = this.viewport.boardArea;
-    this.boardContainer.setPosition(boardArea.centerX, boardArea.centerY);
+    // For 1080x1920 fixed viewport, center the board in the screen
+    const gameWidth = 1080;
+    const gameHeight = 1920;
+
+    // True center of the game view
+    const centerX = gameWidth / 2;
+    const centerY = gameHeight / 2;
+
+    this.boardContainer.setPosition(centerX, centerY);
   }
 
   /**

@@ -130,6 +130,7 @@ export class HighScoreService {
             this.username = this.redditUsername;
             localStorage.setItem('hexomind_username', this.username);
             console.log('Using Reddit username:', this.redditUsername);
+          }
         }
       }
     } catch (error) {
@@ -270,7 +271,14 @@ export class HighScoreService {
       }));
       localStorage.setItem('hexomind_username', username);
 
-    // Save to localStorage
+      return {
+        success: true,
+        offlineFallback: true,
+        message: 'Username saved locally'
+      };
+    }
+
+    // Save to localStorage first
     localStorage.setItem('hexomind_custom_username', JSON.stringify({
       username: username,
       timestamp: Date.now()
