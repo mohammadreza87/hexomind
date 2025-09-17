@@ -40,6 +40,7 @@ export class HighScoreService {
   private lastSync: number = 0;
   private syncInterval: number = 60000; // Sync every minute
   private initializationPromise: Promise<void> = Promise.resolve();
+  private clientId: string;
 
   static getInstance(): HighScoreService {
     if (!HighScoreService.instance) {
@@ -49,9 +50,50 @@ export class HighScoreService {
   }
 
   constructor() {
+    this.clientId = this.ensureClientId();
     this.seedUsernameFromStorage();
     this.loadCachedScore();
     this.initializationPromise = this.initializeUsername();
+  }
+
+  /**
+   * Ensure we have a stable client identifier for auth fallbacks
+   */
+  private ensureClientId(): string {
+    const key = 'hexomind_client_id';
+    const cached = localStorage.getItem(key);
+    if (cached && cached.length > 0) {
+      return cached;
+    }
+
+    const generated = `client_${typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : Math.random().toString(36).slice(2)}`;
+    localStorage.setItem(key, generated);
+    return generated;
+  }
+
+  private withClientHeaders(init?: RequestInit): RequestInit {
+    const merged: Record<string, string> = {};
+
+    const existing = init?.headers;
+    if (Array.isArray(existing)) {
+      existing.forEach(([key, value]) => {
+        if (key && typeof value === 'string') {
+          merged[key] = value;
+        }
+      });
+    } else if (existing && typeof (existing as Headers)?.forEach === 'function') {
+      (existing as Headers).forEach((value, key) => {
+        merged[key] = value;
+      });
+    } else if (existing && typeof existing === 'object') {
+      Object.assign(merged, existing as Record<string, string>);
+    }
+
+    merged['X-Hexomind-Client-Id'] = this.clientId;
+
+    return { ...init, headers: merged };
   }
 
   /**
@@ -119,7 +161,7 @@ export class HighScoreService {
 
     try {
       // First, try to get username from the server context
-      const response = await fetch('/api/current-user');
+      const response = await fetch('/api/current-user', this.withClientHeaders());
       if (response.ok) {
         const data = await response.json();
         console.log('Current user data from server:', data);
@@ -247,6 +289,10 @@ export class HighScoreService {
     return this.redditUsername;
   }
 
+  getClientId(): string {
+    return this.clientId;
+  }
+
   /**
    * Check if user has custom username
    */
@@ -286,11 +332,11 @@ export class HighScoreService {
     localStorage.setItem('hexomind_username', username);
 
     try {
-      const response = await fetch('/api/commit-username', {
+      const response = await fetch('/api/commit-username', this.withClientHeaders({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username })
-      });
+        body: JSON.stringify({ username, clientId: this.clientId })
+      }));
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -364,8 +410,8 @@ export class HighScoreService {
     }
 
     try {
-      const username = await this.getUsername();
-      const response = await fetch(`/api/highscore/${username}`);
+    const username = await this.getUsername();
+      const response = await fetch(`/api/highscore/${username}`, this.withClientHeaders());
       if (response.ok) {
         const data = await response.json();
         this.cachedHighScore = data.score || 0;
@@ -384,21 +430,21 @@ export class HighScoreService {
    */
   async submitScore(score: number): Promise<HighScoreData> {
     await this.initializationPromise;
-    const username = this.getUsername();
+    const username = await this.getUsername();
 
     try {
       // Add timeout to prevent hanging
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
 
-      const response = await fetch('/api/highscore', {
+      const response = await fetch('/api/highscore', this.withClientHeaders({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ username, score }),
+        body: JSON.stringify({ username, score, clientId: this.clientId }),
         signal: controller.signal
-      });
+      }));
 
       clearTimeout(timeoutId);
 
@@ -446,7 +492,7 @@ export class HighScoreService {
    */
   async getLeaderboard(type: 'global' | 'subreddit' = 'global', limit: number = 10): Promise<LeaderboardEntry[]> {
     try {
-      const response = await fetch(`/api/leaderboard?type=${type}&limit=${limit}`);
+      const response = await fetch(`/api/leaderboard?type=${type}&limit=${limit}`, this.withClientHeaders());
       if (response.ok) {
         const data = await response.json();
         return data.leaderboard || [];

@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { type Request } from 'express';
 import { InitResponse, IncrementResponse, DecrementResponse } from '../shared/types/api';
 import { redis, createServer, context } from '@devvit/web/server';
 import { createPost } from './core/post';
@@ -25,6 +25,7 @@ const USERNAME_RESERVATIONS_KEY = 'hexomind:usernames:reservations';
 const USERNAME_OWNER_KEY = 'hexomind:usernames:owners';
 const USER_ID_TO_USERNAME_KEY = 'hexomind:usernames:by-user';
 const USERNAME_RESERVATION_TTL_MS = 5 * 60 * 1000;
+const CLIENT_ID_HEADER = 'x-hexomind-client-id';
 
 interface UsernameReservationRecord {
   userId: string;
@@ -41,6 +42,12 @@ interface UsernameOwnerRecord {
 interface UserIdToUsernameRecord {
   username: string;
   normalized: string;
+}
+
+interface RequestIdentity {
+  userId: string | null;
+  clientId: string | null;
+  contextUsername: string | null;
 }
 
 function parseJsonRecord<T>(value: string | null): T | null {
@@ -131,6 +138,36 @@ async function renameUserArtifacts(oldUsername: string | null, newUsername: stri
   for (const key of subredditKeys) {
     await updateSortedSetMember(key, oldUsername, newUsername);
   }
+}
+
+function resolveRequestIdentity(req: Request): RequestIdentity {
+  const headerValue = req.headers[CLIENT_ID_HEADER];
+  const headerClientId = Array.isArray(headerValue)
+    ? headerValue[0]
+    : typeof headerValue === 'string'
+      ? headerValue
+      : null;
+
+  const bodyClientId = req.body && typeof (req.body as any).clientId === 'string'
+    ? (req.body as any).clientId
+    : null;
+
+  const clientId = (headerClientId ?? bodyClientId)?.trim() || null;
+  const contextUsername = context.username || (context as any).author || null;
+
+  if (context.userId) {
+    return { userId: context.userId, clientId, contextUsername };
+  }
+
+  if (clientId) {
+    return { userId: `client:${clientId}`, clientId, contextUsername };
+  }
+
+  if (contextUsername) {
+    return { userId: `user:${contextUsername}`, clientId, contextUsername };
+  }
+
+  return { userId: null, clientId, contextUsername };
 }
 
 const app = express();
@@ -317,9 +354,12 @@ router.get('/api/highscore/:username/rank', async (req, res): Promise<void> => {
 
 router.post('/api/highscore', async (req, res): Promise<void> => {
   try {
-    const { username, score } = req.body;
+    const { username } = req.body;
+    const score = typeof req.body.score === 'number'
+      ? Math.max(0, Math.floor(req.body.score))
+      : NaN;
 
-    if (!username || typeof score !== 'number') {
+    if (!username || !Number.isFinite(score)) {
       res.status(400).json({ error: 'Username and score are required' });
       return;
     }
@@ -393,6 +433,9 @@ router.get('/api/leaderboard', async (req, res): Promise<void> => {
       ? (rawType as LeaderboardPeriod)
       : 'global';
     const date = req.query.date as string;
+    const requestedUsername = typeof req.query.username === 'string' && req.query.username.trim().length > 0
+      ? req.query.username.trim()
+      : null;
 
     console.log(`Fetching ${type} leaderboard with limit ${limit}`);
 
@@ -400,16 +443,16 @@ router.get('/api/leaderboard', async (req, res): Promise<void> => {
     if (type === 'daily') {
       const today = date || new Date().toISOString().split('T')[0];
       console.log(`Fetching daily leaderboard for ${today}`);
-      leaderboard = await getDailyLeaderboard(today, limit);
+      leaderboard = await getDailyLeaderboard(today, limit, requestedUsername ?? undefined);
     } else if (type === 'weekly') {
       console.log('Fetching weekly leaderboard');
-      leaderboard = await getWeeklyLeaderboard(limit);
+      leaderboard = await getWeeklyLeaderboard(limit, requestedUsername ?? undefined);
     } else if (type === 'subreddit' && context.subredditName) {
       console.log(`Fetching subreddit leaderboard for ${context.subredditName}`);
       leaderboard = await getSubredditLeaderboard(context.subredditName, limit);
     } else {
       console.log('Fetching global leaderboard');
-      leaderboard = await getGlobalLeaderboard(limit);
+      leaderboard = await getGlobalLeaderboard(limit, requestedUsername ?? undefined);
     }
 
     leaderboard = normalizeLeaderboardEntries(leaderboard);
@@ -426,11 +469,11 @@ router.get('/api/leaderboard', async (req, res): Promise<void> => {
       // Retry fetching
       if (type === 'daily') {
         const today = date || new Date().toISOString().split('T')[0];
-        leaderboard = await getDailyLeaderboard(today, limit);
+        leaderboard = await getDailyLeaderboard(today, limit, requestedUsername ?? undefined);
       } else if (type === 'weekly') {
-        leaderboard = await getWeeklyLeaderboard(limit);
+        leaderboard = await getWeeklyLeaderboard(limit, requestedUsername ?? undefined);
       } else {
-        leaderboard = await getGlobalLeaderboard(limit);
+        leaderboard = await getGlobalLeaderboard(limit, requestedUsername ?? undefined);
       }
       leaderboard = normalizeLeaderboardEntries(leaderboard);
       console.log(`After initialization: ${leaderboard.length} entries`);
@@ -465,9 +508,9 @@ router.post('/api/initialize-leaderboards', async (_req, res): Promise<void> => 
 });
 
 // Get current user endpoint
-router.get('/api/current-user', async (_req, res): Promise<void> => {
+router.get('/api/current-user', async (req, res): Promise<void> => {
   try {
-    const userId = context.userId;
+    const { userId, clientId, contextUsername } = resolveRequestIdentity(req);
     let customUsername: string | null = null;
 
     if (userId) {
@@ -479,15 +522,11 @@ router.get('/api/current-user', async (_req, res): Promise<void> => {
       }
     }
 
-    const contextUsername = context.username ||
-      (context as any).author ||
-      (context as any).user ||
-      null;
-
     res.json({
-      username: contextUsername,
+      username: customUsername ?? contextUsername,
       customUsername,
       userId,
+      clientId,
       postId: context.postId,
       subreddit: context.subredditName,
       contextKeys: Object.keys(context)
@@ -502,7 +541,7 @@ router.get('/api/current-user', async (_req, res): Promise<void> => {
 router.post('/api/check-username', async (req, res): Promise<void> => {
   try {
     const { username } = req.body;
-    const userId = context.userId;
+    const { userId } = resolveRequestIdentity(req);
 
     if (!userId) {
       res.status(401).json({ error: 'Authentication required', available: false });
@@ -576,7 +615,7 @@ router.post('/api/check-username', async (req, res): Promise<void> => {
 router.post('/api/commit-username', async (req, res): Promise<void> => {
   try {
     const { username } = req.body;
-    const userId = context.userId;
+    const { userId } = resolveRequestIdentity(req);
 
     if (!userId) {
       res.status(401).json({ error: 'Authentication required' });

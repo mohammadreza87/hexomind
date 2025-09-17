@@ -70,14 +70,14 @@ export const GameOverPanel: React.FC<GameOverPanelProps> = ({
       {/* Panel with better width control */}
       <div className="game-over-panel relative w-full max-w-xs">
         {/* Glass panel with gradient border */}
-        <div className="relative p-1 rounded-2xl bg-gradient-to-br from-purple-500/30 via-pink-500/30 to-cyan-500/30">
-          <div className="relative bg-gray-900/90 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/10">
+        <div className="relative rounded-2xl">
+          <div className="relative bg-gray-900/90 backdrop-blur-xl rounded-2xl shadow-2xl">
 
-            {/* Content with MORE padding */}
-            <div className="game-over-content px-10 py-12">
+            {/* Content with normal padding */}
+            <div className="game-over-content" style={{padding: '2rem 2.5rem'}}>
 
-              {/* Game Over Title with more space */}
-              <div className="text-center mb-10">
+              {/* Game Over Title */}
+              <div className="text-center" style={{marginBottom: '2rem'}}>
                 <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-400 via-pink-400 to-cyan-400 bg-clip-text text-transparent">
                   GAME OVER
                 </h1>
@@ -88,11 +88,11 @@ export const GameOverPanel: React.FC<GameOverPanelProps> = ({
                 )}
               </div>
 
-              {/* Score Display Section with more space */}
-              <div className="mb-10 space-y-8">
+              {/* Score Display Section */}
+              <div style={{marginBottom: '2rem', display: 'flex', flexDirection: 'column', gap: '2rem'}}>
                 {/* Current Score */}
                 <div className="text-center">
-                  <div className="text-white/60 text-xs font-medium uppercase tracking-wider mb-3">Score</div>
+                  <div className="text-white/60 text-xs font-medium uppercase tracking-wider" style={{marginBottom: '0.5rem'}}>Score</div>
                   <div className="text-3xl font-bold text-white">
                     {score}
                   </div>
@@ -100,20 +100,21 @@ export const GameOverPanel: React.FC<GameOverPanelProps> = ({
 
                 {/* Best Score */}
                 <div className="text-center">
-                  <div className="text-white/60 text-xs font-medium uppercase tracking-wider mb-3">Best Score</div>
+                  <div className="text-white/60 text-xs font-medium uppercase tracking-wider" style={{marginBottom: '0.5rem'}}>Best Score</div>
                   <div className="text-2xl font-bold text-cyan-400">
                     {highScore}
                   </div>
                 </div>
               </div>
 
-              {/* Action Buttons Section with more spacing */}
-              <div className="space-y-5">
+              {/* Action Buttons Section */}
+              <div style={{display: 'flex', flexDirection: 'column', gap: '1rem'}}>
                 {/* Try Again Button */}
                 <div className="flex justify-center">
                   <button
                     onClick={onTryAgain}
-                    className="w-full py-5 px-4 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold text-sm shadow-lg hover:shadow-xl transform transition-all duration-200 hover:scale-105 active:scale-95"
+                    style={{padding: '0.75rem 1.5rem'}}
+                    className="w-full rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold text-sm shadow-lg hover:shadow-xl transform transition-all duration-200 hover:scale-105 active:scale-95"
                   >
                     <span className="flex items-center justify-center gap-2">
                       <svg
@@ -138,7 +139,8 @@ export const GameOverPanel: React.FC<GameOverPanelProps> = ({
                 <div className="flex justify-center">
                   <button
                     onClick={onShowLeaderboard}
-                    className="w-full py-5 px-4 rounded-xl bg-gradient-to-r from-cyan-500/20 to-blue-500/20 backdrop-blur-sm border border-cyan-500/30 text-cyan-400 font-bold text-sm hover:bg-cyan-500/30 transform transition-all duration-200 hover:scale-105 active:scale-95"
+                    style={{padding: '0.75rem 1.5rem'}}
+                    className="w-full rounded-xl bg-gradient-to-r from-cyan-500/20 to-blue-500/20 backdrop-blur-sm text-cyan-400 font-bold text-sm hover:bg-cyan-500/30 transform transition-all duration-200 hover:scale-105 active:scale-95"
                   >
                     <span className="flex items-center justify-center gap-2">
                       <svg

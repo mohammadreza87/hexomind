@@ -5,6 +5,7 @@ type LeaderboardEntryInput = Partial<LeaderboardEntry> & {
   rank?: number | string | null;
   username?: string | null;
   timestamp?: number | string | null;
+  isFake?: boolean | null;
 };
 
 const FALLBACK_USERNAME_PREFIX = 'player';
@@ -76,6 +77,7 @@ export function normalizeLeaderboardEntries(
         score,
         timestamp,
         postId,
+        isFake: raw.isFake === true
       });
     }
   });
@@ -90,7 +92,9 @@ export function normalizeLeaderboardEntries(
   });
 
   normalized.forEach((entry, index) => {
-    entry.rank = index + 1;
+    if (!Number.isFinite(entry.rank) || entry.rank <= 0) {
+      entry.rank = index + 1;
+    }
   });
 
   return normalized;

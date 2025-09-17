@@ -43,19 +43,12 @@ vi.mock('@devvit/web/server', () => {
       key: string,
       start: number,
       stop: number,
-      options?: { reverse?: boolean; withScores?: boolean }
-    ): Promise<string[]> {
+      options?: { reverse?: boolean }
+    ): Promise<Array<{ member: string; score: number }>> {
       const entries = getSortedEntries(key).sort((a, b) => a[1] - b[1]);
       const ordered = options?.reverse ? entries.slice().reverse() : entries;
       const sliced = ordered.slice(start, stop + 1);
-      const result: string[] = [];
-      for (const [member, value] of sliced) {
-        result.push(member);
-        if (options?.withScores) {
-          result.push(value.toString());
-        }
-      }
-      return result;
+      return sliced.map(([member, value]) => ({ member, score: value }));
     },
     async zScore(key: string, member: string): Promise<number | null> {
       const set = sortedSets.get(key);
@@ -76,6 +69,24 @@ vi.mock('@devvit/web/server', () => {
       const entries = getSortedEntries(key).sort((a, b) => b[1] - a[1]);
       const index = entries.findIndex(([name]) => name === member);
       return index === -1 ? null : index;
+    },
+    async del(...keys: string[]): Promise<number> {
+      let removed = 0;
+      for (const key of keys) {
+        if (stringStore.delete(key)) {
+          removed++;
+        }
+        if (sortedSets.delete(key)) {
+          removed++;
+        }
+        if (hashStore.delete(key)) {
+          removed++;
+        }
+        if (expiryStore.delete(key)) {
+          removed++;
+        }
+      }
+      return removed;
     },
     async hSet(key: string, values: Record<string, string>): Promise<number> {
       const current = hashStore.get(key) ?? {};
@@ -158,9 +169,9 @@ describe('Highscore endpoint flow', () => {
 
     const today = getToday();
 
-    const [globalBefore] = await getGlobalLeaderboard(1);
-    const [dailyBefore] = await getDailyLeaderboard(today, 1);
-    const [weeklyBefore] = await getWeeklyLeaderboard(1);
+    const globalBefore = (await getGlobalLeaderboard(50)).find(entry => entry.username === username);
+    const dailyBefore = (await getDailyLeaderboard(today, 25)).find(entry => entry.username === username);
+    const weeklyBefore = (await getWeeklyLeaderboard(50)).find(entry => entry.username === username);
 
     expect(globalBefore?.score).toBe(initialScore);
     expect(dailyBefore?.score).toBe(initialScore);
@@ -172,9 +183,9 @@ describe('Highscore endpoint flow', () => {
     expect(submission.updated).toBe(false);
     expect(submission.authoritativeScore).toBe(initialScore);
 
-    const [globalAfter] = await getGlobalLeaderboard(1);
-    const [dailyAfter] = await getDailyLeaderboard(today, 1);
-    const [weeklyAfter] = await getWeeklyLeaderboard(1);
+    const globalAfter = (await getGlobalLeaderboard(50)).find(entry => entry.username === username);
+    const dailyAfter = (await getDailyLeaderboard(today, 25)).find(entry => entry.username === username);
+    const weeklyAfter = (await getWeeklyLeaderboard(50)).find(entry => entry.username === username);
 
     expect(globalAfter?.score).toBe(initialScore);
     expect(dailyAfter?.score).toBe(initialScore);
@@ -193,9 +204,9 @@ describe('Highscore endpoint flow', () => {
     await updateDailyLeaderboard(username, 500);
     await updateWeeklyLeaderboard(username, 500);
 
-    const [globalEntry] = await getGlobalLeaderboard(1);
-    const [dailyEntry] = await getDailyLeaderboard(today, 1);
-    const [weeklyEntry] = await getWeeklyLeaderboard(1);
+    const globalEntry = (await getGlobalLeaderboard(50)).find(entry => entry.username === username);
+    const dailyEntry = (await getDailyLeaderboard(today, 25)).find(entry => entry.username === username);
+    const weeklyEntry = (await getWeeklyLeaderboard(50)).find(entry => entry.username === username);
     const storedHighScore = await getUserHighScore(username);
 
     expect(globalEntry?.score).toBe(bestScore);

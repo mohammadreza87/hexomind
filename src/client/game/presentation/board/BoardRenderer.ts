@@ -56,8 +56,8 @@ export class BoardRenderer {
     this.themeProvider = new NeonThemeProvider();
     this.viewport = viewport;
     this.hexRenderer = new HexagonRenderer(this.themeProvider);
-    // Match the 30° runtime rotation used by board textures and piece images
-    this.hexRenderer.setRotationOffset(Math.PI / 6);
+    this.hexRenderer.setOrientation('flat');
+    this.hexRenderer.setRotationOffset(0);
 
     this.cellBaseImages = new Map();
     this.cellFillImages = new Map();
@@ -115,7 +115,7 @@ export class BoardRenderer {
     const gameWidth = 1080;
     const gameHeight = 1920;
 
-    // Board radius is 4, so we need to fit 9 cells horizontally and vertically at max
+    // Board radius is 3, so we need to fit the full diameter plus borders
     const gridWidth = 8.5;  // Slightly less to make hexagons bigger
     const gridHeight = 8.5; // Slightly less to make hexagons bigger
 
@@ -124,8 +124,8 @@ export class BoardRenderer {
     // Use about 45% of height for the board area
     const availableHeight = gameHeight * 0.45;
 
-    const sizeByWidth = availableWidth / (Math.sqrt(3) * gridWidth);
-    const sizeByHeight = availableHeight / (1.5 * gridHeight);
+    const sizeByWidth = availableWidth / (1.5 * gridWidth);
+    const sizeByHeight = availableHeight / (Math.sqrt(3) * gridHeight);
 
     const baseSize = Math.min(sizeByWidth, sizeByHeight);
 
@@ -157,6 +157,16 @@ export class BoardRenderer {
   }
 
   /**
+   * Regenerate the board (public method for resetting the game)
+   */
+  public regenerateBoard(): void {
+    // Clear the board model
+    this.gridModel.reset();
+    // Regenerate visual board
+    this.generateBoard();
+  }
+
+  /**
    * Create a single cell
    */
   private createCell(coords: HexCoordinates): void {
@@ -169,10 +179,12 @@ export class BoardRenderer {
     const dim = radius * 2;
     const base = this.scene.add.image(position.x, position.y, RenderConfig.TEXTURE_KEYS.HEX_BASE_SVG).setOrigin(0.5);
     base.setDisplaySize(dim, dim);
-    base.setRotation(Math.PI / 6);  // Ensure consistent 30° rotation at creation time
+    base.setAlpha(0.3); // Set initial alpha for empty cell appearance
+    base.setTint(0x303050); // Darker tint for empty cells
+    // No rotation - images should already be in correct orientation
     const fill = this.scene.add.image(position.x, position.y, RenderConfig.TEXTURE_KEYS.HEX_FILL_SVG).setOrigin(0.5);
     fill.setDisplaySize(dim - 2, dim - 2);
-    fill.setRotation(Math.PI / 6);  // Ensure consistent 30° rotation at creation time
+    // No rotation - hexagons should be flat-top orientation
     fill.setVisible(false);
 
     // Create interactive zone
@@ -269,10 +281,10 @@ export class BoardRenderer {
     const dim = radius * 2;
     base.setScale(1);
     base.setDisplaySize(dim, dim);
-    base.setRotation(Math.PI / 6);  // 30 degree rotation for flat-top to pointy-top
+    // No rotation - images should already be in correct orientation for flat-top
     fill.setScale(1);
     fill.setDisplaySize(dim - 2, dim - 2);
-    fill.setRotation(Math.PI / 6);  // 30 degree rotation for flat-top to pointy-top
+    // No rotation - images should already be in correct orientation for flat-top
 
     // Base tint (grid)
     const isAlt = (coords.q + coords.r) % 2 === 0;
@@ -309,9 +321,9 @@ export class BoardRenderer {
    */
   private hexToPixelInternal(hex: HexCoordinates): Phaser.Math.Vector2 {
     const size = this.hexSize;
-    // Flat-top hexagon formula with rotation
-    const x = size * Math.sqrt(3) * (hex.q + hex.r / 2);
-    const y = size * 1.5 * hex.r;
+    // Flat-top hexagon axial-to-pixel conversion
+    const x = size * 1.5 * hex.q;
+    const y = size * Math.sqrt(3) * (hex.r + hex.q / 2);
 
     return new Phaser.Math.Vector2(x, y);
   }
@@ -326,9 +338,9 @@ export class BoardRenderer {
 
     const size = this.hexSize;
 
-    // For pointy-top hexagons:
-    const q = (Math.sqrt(3) / 3 * localX - 1 / 3 * localY) / size;
-    const r = (2 / 3 * localY) / size;
+    // For flat-top hexagons:
+    const q = ((2 / 3) * localX) / size;
+    const r = ((-1 / 3) * localX + (Math.sqrt(3) / 3) * localY) / size;
 
     // Round to nearest hex
     return this.roundToNearestHex(q, r);
@@ -721,81 +733,28 @@ export class BoardRenderer {
     return new Promise(resolve => {
       if (!lines || lines.length === 0) { resolve(); return; }
 
-      // Collect all unique cells with their line index
-      const cellByKey = new Map<string, HexCoordinates>();
-      const cellsToAnimate: { coord: HexCoordinates, key: string, lineIndex: number, cellIndex: number }[] = [];
-
-      lines.forEach((line, lineIdx) => {
-        line.cells.forEach((c, cellIdx) => {
+      // Just immediately clear cells without any animation
+      lines.forEach((line) => {
+        line.cells.forEach((c) => {
           const key = hexToKey(c);
-          cellByKey.set(key, c);
-          cellsToAnimate.push({ coord: c, key, lineIndex: lineIdx, cellIndex: cellIdx });
+          const img = this.cellFillImages.get(key);
+          if (img) {
+            // Update model
+            this.gridModel.setCellOccupied(c, false);
+
+            // Reset visual immediately
+            const radius = this.hexSize - this.hexSpacing;
+            const dim = radius * 2;
+            img.setVisible(false);
+            img.setScale(1);
+            img.setDisplaySize(dim - 2, dim - 2);
+            img.setAlpha(1);
+          }
         });
       });
 
-      if (cellsToAnimate.length === 0) { resolve(); return; }
-
-      // Randomly choose wave direction
-      const waveFromLeft = Math.random() < 0.5;
-
-      // Sort cells based on random direction
-      cellsToAnimate.sort((a, b) => {
-        if (waveFromLeft) {
-          // Sort by cell index (left to right in line)
-          return a.cellIndex - b.cellIndex;
-        } else {
-          // Sort by reverse cell index (right to left)
-          return b.cellIndex - a.cellIndex;
-        }
-      });
-
-      // Wave effect parameters
-      const perCellDelay = 20; // Very short delay between cells (20ms)
-      const animDuration = 150; // Smooth scale to zero
-
-      let completed = 0;
-      const total = cellsToAnimate.length;
-
-      // Animate each cell with sequential delay
-      cellsToAnimate.forEach((cell, index) => {
-        const img = this.cellFillImages.get(cell.key);
-        if (img) {
-          this.scene.tweens.add({
-            targets: img,
-            scaleX: 0,
-            scaleY: 0,
-            alpha: 0,
-            duration: animDuration,
-            delay: index * perCellDelay, // Sequential delay for wave effect
-            ease: 'Power2.easeIn',
-            onStart: () => {
-              this.depthEffects.highlightLineClear(img, img.tintTopLeft);
-            },
-            onComplete: () => {
-              completed++;
-
-              // Update model
-              this.gridModel.setCellOccupied(cell.coord, false);
-
-              // Reset visual for reuse - reset display size too!
-              const radius = this.hexSize - this.hexSpacing;
-              const dim = radius * 2;
-              img.setVisible(false);
-              img.setScale(1);
-              img.setDisplaySize(dim - 2, dim - 2);
-              img.setAlpha(1);
-
-              this.depthEffects.cleanupGameObject(img);
-
-              // When all animations complete
-              if (completed === total) {
-                this.updateBoard();
-                resolve();
-              }
-            }
-          });
-        }
-      });
+      this.updateBoard();
+      resolve();
     });
   }
 

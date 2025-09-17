@@ -325,7 +325,7 @@ export class SettingsUI extends UIComponent {
       this.usernameStatusText.setVisible(true);
     } else {
       // Save username
-      this.saveUsername();
+      void this.saveUsername();
     }
   }
 
@@ -343,12 +343,12 @@ export class SettingsUI extends UIComponent {
       const key = event.key;
 
       if (key === 'Enter') {
-        this.saveUsername();
+        void this.saveUsername();
         return;
       }
 
       if (key === 'Escape') {
-        this.cancelUsernameEdit();
+        void this.cancelUsernameEdit();
         return;
       }
 
@@ -420,10 +420,14 @@ export class SettingsUI extends UIComponent {
 
     try {
       // Check if username is available
+      const clientId = highScoreService.getClientId();
       const response = await fetch('/api/check-username', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username })
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Hexomind-Client-Id': clientId
+        },
+        body: JSON.stringify({ username, clientId })
       });
 
       if (response.ok) {
@@ -436,7 +440,7 @@ export class SettingsUI extends UIComponent {
             this.currentUsernameText.setText(username);
             this.currentUsernameText.setColor(this.getColor('accents', 'indigo'));
 
-            this.cancelUsernameEdit();
+            await this.cancelUsernameEdit();
 
             if (result.offlineFallback) {
               this.usernameStatusText.setText('✓ Username saved locally');
@@ -469,7 +473,7 @@ export class SettingsUI extends UIComponent {
       this.currentUsernameText.setText(username);
       this.currentUsernameText.setColor(this.getColor('accents', 'indigo'));
 
-      this.cancelUsernameEdit();
+      await this.cancelUsernameEdit();
 
       this.usernameStatusText.setText(result.message || '✓ Username saved locally');
       this.usernameStatusText.setColor(this.getColor('accents', 'amber'));
@@ -484,7 +488,7 @@ export class SettingsUI extends UIComponent {
   /**
    * Cancel username editing
    */
-  private cancelUsernameEdit(): void {
+  private async cancelUsernameEdit(): Promise<void> {
     this.isEditingUsername = false;
     this.pendingUsername = '';
 
@@ -500,11 +504,11 @@ export class SettingsUI extends UIComponent {
     // Clear keyboard listeners
     this.scene.input.keyboard?.removeAllListeners();
 
-    this.updateUsernameUI();
+    await this.updateUsernameUI();
   }
 
-  private updateUsernameUI(): void {
-    const username = highScoreService.getUsername();
+  private async updateUsernameUI(): Promise<void> {
+    const username = await highScoreService.getUsername();
     const isCustom = highScoreService.hasCustomUsername();
     const redditUsername = highScoreService.getRedditUsername();
 
@@ -615,7 +619,7 @@ export class SettingsUI extends UIComponent {
 
     // Cancel any ongoing edits
     if (this.isEditingUsername) {
-      this.cancelUsernameEdit();
+      void this.cancelUsernameEdit();
     }
 
     this.scene.tweens.add({

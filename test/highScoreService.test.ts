@@ -10,6 +10,21 @@ let localStorageStub: LocalStorageStub;
 beforeEach(() => {
   vi.resetModules();
 
+  const cryptoGlobal = globalThis as any;
+  const existingCrypto = cryptoGlobal.crypto;
+  if (existingCrypto) {
+    if (typeof existingCrypto.randomUUID === 'function') {
+      vi.spyOn(existingCrypto, 'randomUUID').mockImplementation(() => 'test-uuid');
+    } else {
+      existingCrypto.randomUUID = vi.fn(() => 'test-uuid');
+    }
+  } else {
+    Object.defineProperty(cryptoGlobal, 'crypto', {
+      value: { randomUUID: vi.fn(() => 'test-uuid') },
+      configurable: true
+    });
+  }
+
   const store = new Map<string, string>();
   localStorageStub = {
     store,

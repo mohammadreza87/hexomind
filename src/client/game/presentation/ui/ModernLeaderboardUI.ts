@@ -508,7 +508,7 @@ export class ModernLeaderboardUI extends UIComponent {
     this.emptyText.setVisible(false);
 
     await highScoreService.waitForInitialization();
-    const currentUsername = highScoreService.getUsername();
+    const currentUsername = await highScoreService.getUsername();
 
     const panelWidth = this.panel.width;
     const startY = -130; // Start from top of scrollable area
@@ -704,7 +704,7 @@ export class ModernLeaderboardUI extends UIComponent {
 
     try {
       await highScoreService.waitForInitialization();
-      const currentUsername = highScoreService.getUsername();
+      const currentUsername = await highScoreService.getUsername();
       const currentScore = this.currentPlayerScore || 0;
 
       // Find player in entries

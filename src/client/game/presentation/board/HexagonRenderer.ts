@@ -20,7 +20,7 @@ export class HexagonRenderer {
   }
 
   /**
-   * Get hexagon corner points (flat-top orientation)
+   * Get hexagon corner points for the configured orientation
    */
   getHexPoints(size: number): Phaser.Math.Vector2[] {
     // Check cache
@@ -436,6 +436,16 @@ export class HexagonRenderer {
    */
   clearCache(): void {
     this.cachedPoints.clear();
+  }
+
+  /**
+   * Configure the base orientation for generated hex points.
+   */
+  setOrientation(orientation: 'pointy' | 'flat'): void {
+    if (this.orientation !== orientation) {
+      this.orientation = orientation;
+      this.clearCache();
+    }
   }
 
   /**

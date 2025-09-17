@@ -1,5 +1,6 @@
 import * as Phaser from 'phaser';
 import { NeonThemeProvider } from '../theme/NeonThemeProvider';
+import { HexagonRenderer } from '../board/HexagonRenderer';
 
 interface DepthPipelineConfig {
   intensity?: number;
@@ -87,6 +88,7 @@ export class DepthEffects {
   private readonly shadowBase = new WeakMap<Phaser.GameObjects.Graphics, { alpha: number }>();
   private readonly glowBase = new WeakMap<Phaser.GameObjects.GameObject, { alpha: number }>();
   private readonly objectDepth = new WeakMap<Phaser.GameObjects.GameObject, number>();
+  private readonly shadowRenderer: HexagonRenderer;
 
   private constructor(scene: Phaser.Scene, themeProvider: NeonThemeProvider) {
     this.scene = scene;
@@ -95,6 +97,11 @@ export class DepthEffects {
     this.prefersReducedMotion = false;
     this.configureMotionPreferences();
     this.registerPipeline();
+
+    this.shadowRenderer = new HexagonRenderer(themeProvider);
+    // Use the same orientation as the board - flat with no rotation
+    this.shadowRenderer.setOrientation('flat');
+    this.shadowRenderer.setRotationOffset(0);
   }
 
   isMotionReduced(): boolean {
@@ -134,15 +141,23 @@ export class DepthEffects {
     shadow.clear();
 
     const opacity = this.prefersReducedMotion ? 0.12 : 0.22;
-    shadow.fillStyle(0x000000, opacity);
 
-    // Adjust shadow offset for rotated hexagons (30 degree rotation)
+    // Shadow offset and scale
     const offsetX = hexSize * 0.08;
     const offsetY = hexSize * 0.10;
     const scale = hexSize * 0.96;
 
     offsets.forEach((point) => {
-      this.drawHexagon(shadow, point.x + offsetX, point.y + offsetY, scale, true);
+      this.shadowRenderer.drawHexagon(
+        shadow,
+        point.x + offsetX,
+        point.y + offsetY,
+        scale,
+        0x000000,
+        0x000000,
+        0,
+        opacity
+      );
     });
 
     const base = this.shadowBase.get(shadow);
@@ -314,36 +329,13 @@ export class DepthEffects {
   }
 
   celebrateCellFill(image: Phaser.GameObjects.Image, tint: number): void {
-    if (this.prefersReducedMotion) {
-      return;
-    }
-
-    this.pushDepth(image, 90);
-    // Pipeline disabled - no glow effects
-    // this.applyPipeline(image, 0.4, tint);
-
-    this.scene.tweens.add({
-      targets: image,
-      scale: image.scale * 1.08,
-      duration: 140,
-      ease: Phaser.Math.Easing.Back.Out,
-      yoyo: true,
-      onComplete: () => {
-        this.cleanupGameObject(image);
-      }
-    });
+    // Completely disabled - no effects at all
+    return;
   }
 
   highlightLineClear(image: Phaser.GameObjects.Image, tint: number): void {
-    if (this.prefersReducedMotion) {
-      return;
-    }
-
-    this.pushDepth(image, 200);
-    // Pipeline disabled - no glow effects
-    // this.applyPipeline(image, 0.65, tint);
-    const { x, y } = this.getWorldPosition(image);
-    this.spawnParticleBurst(x, y, tint);
+    // Completely disabled - no effects at all
+    return;
   }
 
   cleanupGameObject(gameObject: Phaser.GameObjects.GameObject): void {
@@ -460,36 +452,6 @@ export class DepthEffects {
     const g = ((color >> 8) & 0xff) / 255;
     const b = (color & 0xff) / 255;
     return [r, g, b];
-  }
-
-  private drawHexagon(
-    graphics: Phaser.GameObjects.Graphics,
-    x: number,
-    y: number,
-    size: number,
-    fill: boolean
-  ): void {
-    const rotation = Math.PI / 6; // 30 degrees rotation to match piece orientation
-    const cos = Math.cos(rotation);
-    const sin = Math.sin(rotation);
-
-    const points: Phaser.Geom.Point[] = [];
-    for (let i = 0; i < 6; i++) {
-      const angle = (Math.PI / 3) * i - Math.PI / 6; // Base flat-top orientation
-      const px = size * Math.cos(angle);
-      const py = size * Math.sin(angle);
-
-      const rotatedX = px * cos - py * sin;
-      const rotatedY = px * sin + py * cos;
-
-      points.push(new Phaser.Geom.Point(x + rotatedX, y + rotatedY));
-    }
-
-    if (fill) {
-      graphics.fillPoints(points, true);
-    } else {
-      graphics.strokePoints(points, true);
-    }
   }
 
   private getWorldPosition(gameObject: Phaser.GameObjects.GameObject): { x: number; y: number } {

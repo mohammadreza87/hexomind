@@ -15,6 +15,7 @@ export class RenderConfig {
     // SVG variants
     HEX_BASE_SVG: 'hex_base_svg',
     HEX_FILL_SVG: 'hex_fill_svg',
+    HEX_PIECE_GLASS: 'hex_piece_glass',
     HEX_EMPTY: 'hex_empty',
     HEX_FILLED: 'hex_filled',
     HEX_PIECE: 'hex_piece',

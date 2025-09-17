@@ -3,6 +3,26 @@
  */
 import { redis } from '@devvit/web/server';
 
+import {
+  getDailyBucket,
+  getDailyFakeKey,
+  getDailyLeaderboardKey,
+  getWeeklyBucket,
+  getWeeklyFakeKey,
+  getWeeklyLeaderboardKey,
+  formatWeeklyBucket,
+} from '../utils/time';
+
+const GLOBAL_FAKE_KEY = 'leaderboard:global:fake';
+const FAKE_META_PREFIX = 'leaderboard:fake:meta';
+
+const GLOBAL_FAKE_RANGE = { min: 100, max: 120 };
+const DAILY_FAKE_RANGE = { min: 5, max: 15 };
+const WEEKLY_FAKE_RANGE = { min: 25, max: 35 };
+
+const DAILY_TTL_SECONDS = 3 * 24 * 60 * 60; // keep a few snapshots for analytics
+const WEEKLY_TTL_SECONDS = 6 * 24 * 60 * 60;
+
 type DevvitGlobal = typeof globalThis & {
   devvit?: {
     metadataProvider?: () => unknown;
@@ -34,44 +54,8 @@ async function ensureRedisAvailable(): Promise<boolean> {
     }
   }
 
-  const redisWithExtras = redis as {
-    ping?: () => Promise<unknown>;
-    exists?: (...keys: string[]) => Promise<number>;
-    zCard?: (key: string) => Promise<number>;
-  };
-
-  if (isFunction(redisWithExtras.ping)) {
-    try {
-      await redisWithExtras.ping();
-      redisAvailability = true;
-      return true;
-    } catch (error) {
-      console.warn('Redis ping availability check failed:', error);
-    }
-  }
-
-  if (isFunction(redisWithExtras.exists)) {
-    try {
-      await redisWithExtras.exists('leaderboard:global');
-      redisAvailability = true;
-      return true;
-    } catch (error) {
-      console.warn('Redis exists availability check failed:', error);
-    }
-  }
-
-  if (isFunction(redisWithExtras.zCard)) {
-    try {
-      await redisWithExtras.zCard('leaderboard:global');
-      redisAvailability = true;
-      return true;
-    } catch (error) {
-      console.warn('Redis zCard availability check failed:', error);
-    }
-  }
-
-  redisAvailability = false;
-  return false;
+  redisAvailability = true;
+  return true;
 }
 
 // Realistic Reddit-style usernames
@@ -84,158 +68,204 @@ const USERNAME_PREFIXES = [
 
 const USERNAME_SUFFIXES = [
   'Master', 'King', 'Queen', 'Lord', 'Lady', 'Knight', 'Wizard', 'Mage',
-  'Hunter', 'Slayer', 'Crusher', 'Destroyer', 'Builder', 'Creator', 'Gamer',
+  'Hunter', 'Slayer', 'Crusher', 'Builder', 'Creator', 'Gamer',
   '2025', '2024', 'XD', 'Pro', 'Max', 'Plus', 'Ultra', 'Prime', 'Alpha',
   'Beta', 'Omega', 'Zero', 'One', 'X', 'Z', '_YT', '_TTV', 'Gaming'
 ];
 
+const USERNAME_JOINERS = ['', '_', '-', ''];
+
+function randomInt(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function getFakeMetaKey(scope: 'global' | 'daily' | 'weekly', bucket?: string): string {
+  if (scope === 'global') {
+    return `${FAKE_META_PREFIX}:global`;
+  }
+  if (!bucket) {
+    throw new Error(`bucket is required for scope ${scope}`);
+  }
+  return `${FAKE_META_PREFIX}:${scope}:${bucket}`;
+}
+
 /**
- * Generate a random username
+ * Generate a random username that feels like a Reddit handle
  */
 function generateUsername(): string {
   const prefix = USERNAME_PREFIXES[Math.floor(Math.random() * USERNAME_PREFIXES.length)];
   const suffix = USERNAME_SUFFIXES[Math.floor(Math.random() * USERNAME_SUFFIXES.length)];
-  const number = Math.random() > 0.5 ? Math.floor(Math.random() * 999) : '';
-  return `${prefix}${suffix}${number}`;
+  const joiner = USERNAME_JOINERS[Math.floor(Math.random() * USERNAME_JOINERS.length)];
+  const number = Math.random() > 0.6 ? randomInt(1, 9999).toString().padStart(randomInt(2, 4), '0') : '';
+  return `${prefix}${joiner}${suffix}${number}`;
 }
 
 /**
  * Generate a realistic score based on rank
  */
 function generateScore(rank: number, maxScore: number = 50000): number {
-  // Use exponential decay for more realistic distribution
-  // Top players have high scores, drops off quickly
-  const factor = Math.exp(-rank / 10);
+  const factor = Math.exp(-rank / 12);
   const baseScore = Math.floor(maxScore * factor);
-
-  // Add some randomness
-  const variance = Math.floor(baseScore * 0.2);
+  const variance = Math.floor(baseScore * 0.25);
   const randomOffset = Math.floor(Math.random() * variance) - variance / 2;
+  return Math.max(120, baseScore + randomOffset);
+}
 
-  return Math.max(100, baseScore + randomOffset);
+async function writeFakeEntry(
+  key: string,
+  metaKey: string,
+  username: string,
+  score: number,
+  metadata: { timestamp: number; bucket: string; scope: 'global' | 'daily' | 'weekly' }
+): Promise<void> {
+  await redis.zAdd(key, { score, member: username });
+  await redis.hSet(metaKey, {
+    [username]: JSON.stringify(metadata)
+  });
+}
+
+async function generateUniqueUsername(exclusions: Set<string>): Promise<string> {
+  let username = generateUsername();
+  while (exclusions.has(username)) {
+    username = generateUsername();
+  }
+  exclusions.add(username);
+  return username;
 }
 
 /**
- * Populate all-time leaderboard with dummy data
+ * Populate all-time leaderboard with dummy data (fake bucket)
  */
-export async function populateAllTimeLeaderboard(count: number = 100): Promise<void> {
-  try {
-    console.log(`Populating all-time leaderboard with ${count} dummy entries...`);
+export async function populateAllTimeLeaderboard(count: number = GLOBAL_FAKE_RANGE.min): Promise<void> {
+  if (!(await ensureRedisAvailable())) {
+    return;
+  }
 
-    const leaderboardKey = 'leaderboard:global';
-    const usedUsernames = new Set<string>();
+  const usedUsernames = new Set<string>();
+  await redis.del(GLOBAL_FAKE_KEY);
+  const metaKey = getFakeMetaKey('global');
+  await redis.del(metaKey);
 
-    for (let i = 0; i < count; i++) {
-      let username = generateUsername();
-
-      // Ensure unique usernames
-      while (usedUsernames.has(username)) {
-        username = generateUsername();
-      }
-      usedUsernames.add(username);
-
-      const score = generateScore(i, 50000);
-
-      // Add to global leaderboard
-      await redis.zAdd(leaderboardKey, { score, member: username });
-
-      // Add metadata
-      const metaKey = `highscore:meta:${username}`;
-      await redis.hSet(metaKey, {
-        score: score.toString(),
-        timestamp: (Date.now() - Math.floor(Math.random() * 30 * 24 * 60 * 60 * 1000)).toString(), // Random time in last 30 days
-        postId: 'dummy',
-        subreddit: 'hexomind'
-      });
-
-      // Also set user high score
-      await redis.set(`highscore:user:${username}`, score.toString());
-    }
-
-    console.log('All-time leaderboard populated successfully');
-  } catch (error) {
-    console.error('Error populating all-time leaderboard:', error);
+  for (let i = 0; i < count; i++) {
+    const username = await generateUniqueUsername(usedUsernames);
+    const score = generateScore(i, 50000);
+    const timestamp = Date.now() - randomInt(1, 30) * 24 * 60 * 60 * 1000 - randomInt(0, 12) * 60 * 60 * 1000;
+    await writeFakeEntry(GLOBAL_FAKE_KEY, metaKey, username, score, {
+      timestamp,
+      bucket: 'global',
+      scope: 'global'
+    });
   }
 }
 
 /**
- * Populate daily leaderboard with dummy data
+ * Populate daily leaderboard with dummy data for the supplied bucket (00:01 GMT cutover)
  */
-export async function populateDailyLeaderboard(count: number = 15): Promise<void> {
-  try {
-    const today = new Date().toISOString().split('T')[0];
-    const leaderboardKey = `leaderboard:daily:${today}`;
-
-    console.log(`Populating daily leaderboard for ${today} with ${count} dummy entries...`);
-
-    const usedUsernames = new Set<string>();
-
-    for (let i = 0; i < count; i++) {
-      let username = generateUsername();
-
-      // Ensure unique usernames
-      while (usedUsernames.has(username)) {
-        username = generateUsername();
-      }
-      usedUsernames.add(username);
-
-      // Daily scores are typically lower than all-time
-      const score = generateScore(i, 30000);
-
-      // Add to daily leaderboard
-      await redis.zAdd(leaderboardKey, { score, member: username });
-    }
-
-    // Set expiry for daily leaderboard (7 days)
-    await redis.expire(leaderboardKey, 7 * 24 * 60 * 60);
-
-    console.log('Daily leaderboard populated successfully');
-  } catch (error) {
-    console.error('Error populating daily leaderboard:', error);
+export async function populateDailyLeaderboard(count: number = DAILY_FAKE_RANGE.min, bucket?: string): Promise<void> {
+  if (!(await ensureRedisAvailable())) {
+    return;
   }
+  const activeBucket = bucket ?? getDailyBucket();
+  const key = `leaderboard:daily:${activeBucket}:fake`;
+  const metaKey = getFakeMetaKey('daily', activeBucket);
+
+  await redis.del(key);
+  await redis.del(metaKey);
+
+  const usedUsernames = new Set<string>();
+  for (let i = 0; i < count; i++) {
+    const username = await generateUniqueUsername(usedUsernames);
+    const score = generateScore(i, 32000);
+    const timestamp = Date.now() - randomInt(0, 18) * 60 * 60 * 1000;
+    await writeFakeEntry(key, metaKey, username, score, {
+      timestamp,
+      bucket: activeBucket,
+      scope: 'daily'
+    });
+  }
+
+  await redis.expire(key, DAILY_TTL_SECONDS);
+  await redis.expire(metaKey, DAILY_TTL_SECONDS);
 }
 
 /**
- * Populate weekly leaderboard with dummy data
+ * Populate weekly leaderboard with dummy data for the supplied ISO week bucket
  */
-export async function populateWeeklyLeaderboard(count: number = 35): Promise<void> {
-  try {
-    const now = new Date();
-    const start = new Date(now.getFullYear(), 0, 1);
-    const diff = now.getTime() - start.getTime();
-    const oneWeek = 1000 * 60 * 60 * 24 * 7;
-    const week = Math.floor(diff / oneWeek) + 1;
-    const year = now.getFullYear();
-
-    const leaderboardKey = `leaderboard:weekly:${year}:${week}`;
-
-    console.log(`Populating weekly leaderboard for week ${week} of ${year} with ${count} dummy entries...`);
-
-    const usedUsernames = new Set<string>();
-
-    for (let i = 0; i < count; i++) {
-      let username = generateUsername();
-
-      // Ensure unique usernames
-      while (usedUsernames.has(username)) {
-        username = generateUsername();
-      }
-      usedUsernames.add(username);
-
-      // Weekly scores between daily and all-time
-      const score = generateScore(i, 40000);
-
-      // Add to weekly leaderboard
-      await redis.zAdd(leaderboardKey, { score, member: username });
-    }
-
-    // Set expiry for weekly leaderboard (30 days)
-    await redis.expire(leaderboardKey, 30 * 24 * 60 * 60);
-
-    console.log('Weekly leaderboard populated successfully');
-  } catch (error) {
-    console.error('Error populating weekly leaderboard:', error);
+export async function populateWeeklyLeaderboard(count: number = WEEKLY_FAKE_RANGE.min, bucket?: { year: number; week: number }): Promise<void> {
+  if (!(await ensureRedisAvailable())) {
+    return;
   }
+  const activeBucket = bucket ?? getWeeklyBucket();
+  const bucketLabel = formatWeeklyBucket(activeBucket);
+  const key = `leaderboard:weekly:${bucketLabel}:fake`;
+  const metaKey = getFakeMetaKey('weekly', bucketLabel);
+
+  await redis.del(key);
+  await redis.del(metaKey);
+
+  const usedUsernames = new Set<string>();
+  for (let i = 0; i < count; i++) {
+    const username = await generateUniqueUsername(usedUsernames);
+    const score = generateScore(i, 42000);
+    const timestamp = Date.now() - randomInt(1, 7) * 24 * 60 * 60 * 1000;
+    await writeFakeEntry(key, metaKey, username, score, {
+      timestamp,
+      bucket: bucketLabel,
+      scope: 'weekly'
+    });
+  }
+
+  await redis.expire(key, WEEKLY_TTL_SECONDS);
+  await redis.expire(metaKey, WEEKLY_TTL_SECONDS);
+}
+
+function withinRange(current: number, range: { min: number; max: number }): boolean {
+  return current >= range.min && current <= range.max;
+}
+
+function targetWithinRange(range: { min: number; max: number }): number {
+  return randomInt(range.min, range.max);
+}
+
+export async function ensureFakeGlobalLeaderboard(): Promise<void> {
+  if (!(await ensureRedisAvailable())) {
+    return;
+  }
+  const count = await redis.zCard(GLOBAL_FAKE_KEY) ?? 0;
+  if (withinRange(count, GLOBAL_FAKE_RANGE)) {
+    return;
+  }
+  await populateAllTimeLeaderboard(targetWithinRange(GLOBAL_FAKE_RANGE));
+}
+
+export async function ensureFakeDailyLeaderboard(bucket?: string): Promise<void> {
+  if (!(await ensureRedisAvailable())) {
+    return;
+  }
+  const activeBucket = bucket ?? getDailyBucket();
+  const key = `leaderboard:daily:${activeBucket}:fake`;
+  const count = await redis.zCard(key) ?? 0;
+  if (withinRange(count, DAILY_FAKE_RANGE)) {
+    return;
+  }
+  await populateDailyLeaderboard(targetWithinRange(DAILY_FAKE_RANGE), activeBucket);
+}
+
+export async function ensureFakeWeeklyLeaderboard(bucket?: { year: number; week: number } | string): Promise<void> {
+  if (!(await ensureRedisAvailable())) {
+    return;
+  }
+  const activeBucket = typeof bucket === 'string' ? (() => {
+    const [yearPart, weekPart] = bucket.split(':');
+    return { year: Number(yearPart), week: Number(weekPart) };
+  })() : bucket ?? getWeeklyBucket();
+  const bucketLabel = formatWeeklyBucket(activeBucket);
+  const key = `leaderboard:weekly:${bucketLabel}:fake`;
+  const count = await redis.zCard(key) ?? 0;
+  if (withinRange(count, WEEKLY_FAKE_RANGE)) {
+    return;
+  }
+  await populateWeeklyLeaderboard(targetWithinRange(WEEKLY_FAKE_RANGE), activeBucket);
 }
 
 /**
@@ -243,47 +273,9 @@ export async function populateWeeklyLeaderboard(count: number = 35): Promise<voi
  */
 export async function initializeLeaderboards(): Promise<void> {
   try {
-    if (!(await ensureRedisAvailable())) {
-      console.warn('Skipping leaderboard initialization: Redis context is not available.');
-      return;
-    }
-
-    console.log('Initializing leaderboards with dummy data...');
-
-    // Check if we already have data
-    const globalCount = await redis.zCard('leaderboard:global');
-
-    if (globalCount < 50) {
-      // Populate with different amounts for variety
-      await populateAllTimeLeaderboard(Math.floor(Math.random() * 40) + 80); // 80-120
-      await populateDailyLeaderboard(Math.floor(Math.random() * 10) + 10); // 10-20
-      await populateWeeklyLeaderboard(Math.floor(Math.random() * 25) + 25); // 25-50
-
-      console.log('All leaderboards initialized successfully');
-    } else {
-      console.log('Leaderboards already have data, skipping initialization');
-
-      // Still populate daily and weekly if needed
-      const today = new Date().toISOString().split('T')[0];
-      const dailyCount = await redis.zCard(`leaderboard:daily:${today}`);
-
-      if (dailyCount < 10) {
-        await populateDailyLeaderboard(Math.floor(Math.random() * 10) + 10);
-      }
-
-      // Check weekly
-      const now = new Date();
-      const start = new Date(now.getFullYear(), 0, 1);
-      const diff = now.getTime() - start.getTime();
-      const oneWeek = 1000 * 60 * 60 * 24 * 7;
-      const week = Math.floor(diff / oneWeek) + 1;
-      const year = now.getFullYear();
-      const weeklyCount = await redis.zCard(`leaderboard:weekly:${year}:${week}`);
-
-      if (weeklyCount < 25) {
-        await populateWeeklyLeaderboard(Math.floor(Math.random() * 25) + 25);
-      }
-    }
+    await ensureFakeGlobalLeaderboard();
+    await ensureFakeDailyLeaderboard();
+    await ensureFakeWeeklyLeaderboard();
   } catch (error) {
     console.error('Error initializing leaderboards:', error);
   }
@@ -299,6 +291,8 @@ export async function ensurePlayerInLeaderboard(username: string, score: number)
       return;
     }
 
+    const normalizedScore = Math.max(0, Math.floor(score));
+
     const applyIfHigher = async (key: string, expirySeconds?: number): Promise<void> => {
       const existingScore = await redis.zScore(key, username);
       const parsedScore = typeof existingScore === 'number'
@@ -307,8 +301,8 @@ export async function ensurePlayerInLeaderboard(username: string, score: number)
           ? parseFloat(existingScore)
           : null;
 
-      if (parsedScore === null || Number.isNaN(parsedScore) || score > parsedScore) {
-        await redis.zAdd(key, { score, member: username });
+      if (parsedScore === null || Number.isNaN(parsedScore) || normalizedScore > parsedScore) {
+        await redis.zAdd(key, { score: normalizedScore, member: username });
       }
 
       if (expirySeconds) {
@@ -318,19 +312,18 @@ export async function ensurePlayerInLeaderboard(username: string, score: number)
 
     await applyIfHigher('leaderboard:global');
 
-    const today = new Date().toISOString().split('T')[0];
-    await applyIfHigher(`leaderboard:daily:${today}`, 7 * 24 * 60 * 60);
+    const dailyKey = getDailyLeaderboardKey();
+    await applyIfHigher(dailyKey, DAILY_TTL_SECONDS);
 
-    const now = new Date();
-    const start = new Date(now.getFullYear(), 0, 1);
-    const diff = now.getTime() - start.getTime();
-    const oneWeek = 1000 * 60 * 60 * 24 * 7;
-    const week = Math.floor(diff / oneWeek) + 1;
-    const year = now.getFullYear();
-    await applyIfHigher(`leaderboard:weekly:${year}:${week}`, 30 * 24 * 60 * 60);
+    const weeklyKey = getWeeklyLeaderboardKey();
+    await applyIfHigher(weeklyKey, WEEKLY_TTL_SECONDS);
 
-    console.log(`Ensured ${username} appears in all leaderboards with score ${score}`);
+    console.log(`Ensured ${username} appears in leaderboards with score ${score}`);
   } catch (error) {
     console.error('Error ensuring player in leaderboard:', error);
   }
+}
+
+export function getFakeMetadataKey(scope: 'global' | 'daily' | 'weekly', bucket?: string): string {
+  return getFakeMetaKey(scope, bucket);
 }

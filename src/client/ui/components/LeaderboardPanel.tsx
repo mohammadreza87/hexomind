@@ -1,100 +1,279 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { gsap } from 'gsap';
 import { useUIStore } from '../store/uiStore';
+import { leaderboardService } from '../../services/LeaderboardService';
+import { highScoreService } from '../../services/HighScoreService';
+import type { LeaderboardViewEntry, LeaderboardViewPeriod } from '../../services/LeaderboardService';
 
 type LeaderboardType = 'global' | 'daily' | 'weekly';
-
-interface LeaderboardEntry {
-  rank: number;
-  username: string;
-  score: number;
-  isCurrentUser?: boolean;
-}
 
 export const LeaderboardPanel: React.FC = () => {
   const { toggleLeaderboard } = useUIStore();
   const [activeTab, setActiveTab] = useState<LeaderboardType>('global');
+  const [entries, setEntries] = useState<LeaderboardViewEntry[]>([]);
+  const [currentUser, setCurrentUser] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Mock data - will be connected to actual API
-  const mockData: LeaderboardEntry[] = [
-    { rank: 1, username: 'Player1', score: 10000 },
-    { rank: 2, username: 'Player2', score: 8500 },
-    { rank: 3, username: 'You', score: 7200, isCurrentUser: true },
-    { rank: 4, username: 'Player4', score: 6800 },
-    { rank: 5, username: 'Player5', score: 5400 },
-  ];
+  useEffect(() => {
+    // Animate panel entrance
+    gsap.fromTo(
+      '.leaderboard-panel',
+      {
+        scale: 0.8,
+        opacity: 0,
+        y: 50,
+        backdropFilter: 'blur(0px)',
+      },
+      {
+        scale: 1,
+        opacity: 1,
+        y: 0,
+        backdropFilter: 'blur(20px)',
+        duration: 0.5,
+        ease: 'power3.out',
+      }
+    );
+
+    // Animate content with stagger
+    gsap.fromTo(
+      '.leaderboard-content > *',
+      {
+        opacity: 0,
+        y: 20,
+      },
+      {
+        opacity: 1,
+        y: 0,
+        duration: 0.4,
+        stagger: 0.05,
+        delay: 0.2,
+        ease: 'power2.out',
+      }
+    );
+  }, []);
+
+  const fetchEntries = async (type: LeaderboardType) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      await highScoreService.awaitReady();
+      const username = await highScoreService.getUsername();
+      setCurrentUser(username);
+
+      const limit = type === 'global' ? 100 : type === 'weekly' ? 35 : 25;
+      const period = type as LeaderboardViewPeriod;
+      const leaderboard = await leaderboardService.fetchLeaderboard(period, limit, username);
+      setEntries(leaderboard);
+    } catch (err) {
+      console.error('Failed to fetch leaderboard for overlay:', err);
+      setError('Failed to load leaderboard');
+      setEntries([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void fetchEntries(activeTab);
+  }, [activeTab]);
+
+  const handleClose = () => {
+    // Animate out before closing
+    gsap.to('.leaderboard-panel', {
+      scale: 0.9,
+      opacity: 0,
+      y: -30,
+      duration: 0.3,
+      ease: 'power2.in',
+      onComplete: () => toggleLeaderboard(),
+    });
+  };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-8 pointer-events-auto">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={toggleLeaderboard}
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={handleClose}
       />
 
-      {/* Leaderboard Panel */}
-      <div className="relative glass-dark rounded-3xl p-8 max-w-2xl w-full max-h-[80vh] overflow-hidden animate-float">
-        <h2 className="text-3xl font-bold text-center mb-6 text-gradient from-neon-yellow to-neon-orange">
-          🏆 Leaderboard
-        </h2>
-
-        {/* Tab Selector */}
-        <div className="flex gap-2 mb-6">
-          {(['global', 'daily', 'weekly'] as LeaderboardType[]).map((type) => (
+      {/* Panel with better width control */}
+      <div className="leaderboard-panel relative w-full max-w-md">
+        {/* Glass panel with gradient border */}
+        <div className="relative rounded-2xl">
+          <div className="relative bg-gray-900/90 backdrop-blur-xl rounded-2xl shadow-2xl">
+            {/* Close button */}
             <button
-              key={type}
-              onClick={() => setActiveTab(type)}
-              className={`flex-1 py-2 px-4 rounded-xl font-semibold transition-all duration-200 ${
-                activeTab === type
-                  ? 'bg-gradient-to-r from-neon-purple to-neon-blue text-white'
-                  : 'glass-effect text-white/70 hover:bg-white/10'
-              }`}
+              onClick={handleClose}
+              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors z-10"
             >
-              {type.charAt(0).toUpperCase() + type.slice(1)}
+              <svg className="w-4 h-4 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
             </button>
-          ))}
-        </div>
 
-        {/* Leaderboard List */}
-        <div className="space-y-2 overflow-y-auto max-h-[400px]">
-          {mockData.map((entry) => (
-            <div
-              key={entry.rank}
-              className={`glass-effect rounded-xl p-4 flex items-center justify-between ${
-                entry.isCurrentUser ? 'ring-2 ring-neon-yellow' : ''
-              }`}
-            >
-              <div className="flex items-center gap-4">
-                <div className={`text-2xl font-bold ${
-                  entry.rank <= 3 ? 'text-gradient from-neon-yellow to-neon-orange' : 'text-white/60'
-                }`}>
-                  #{entry.rank}
-                </div>
-                <div className="text-white font-semibold">
-                  {entry.username}
-                  {entry.isCurrentUser && <span className="ml-2 text-neon-yellow">(You)</span>}
+            {/* Content with reduced padding (30% smaller) */}
+            <div className="leaderboard-content" style={{padding: '1.4rem 1.75rem'}}>
+
+              {/* Title */}
+              <div className="text-center" style={{marginBottom: '1.05rem'}}>
+                <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-400 via-pink-400 to-cyan-400 bg-clip-text text-transparent">
+                  LEADERBOARD
+                </h1>
+              </div>
+
+              {/* Tab Selector */}
+              <div className="flex gap-1" style={{marginBottom: '1.05rem'}}>
+                {(['global', 'daily', 'weekly'] as LeaderboardType[]).map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => setActiveTab(type)}
+                    className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all duration-200 ${
+                      activeTab === type
+                        ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
+                        : 'bg-white/5 text-white/60 hover:bg-white/10'
+                    }`}
+                  >
+                    {type}
+                  </button>
+                ))}
+              </div>
+
+              {/* Leaderboard List */}
+              <div className="overflow-y-auto leaderboard-scroll"
+                style={{
+                  maxHeight: '280px',
+                  marginBottom: '1.05rem',
+                  paddingRight: '0.35rem',
+                  scrollbarWidth: 'thin',
+                  scrollbarColor: 'rgba(255,255,255,0.2) transparent'
+                }}>
+                <style>{`
+                  .leaderboard-scroll::-webkit-scrollbar {
+                    width: 4px;
+                  }
+                  .leaderboard-scroll::-webkit-scrollbar-track {
+                    background: transparent;
+                  }
+                  .leaderboard-scroll::-webkit-scrollbar-thumb {
+                    background: rgba(255,255,255,0.2);
+                    border-radius: 2px;
+                  }
+                  .leaderboard-scroll::-webkit-scrollbar-thumb:hover {
+                    background: rgba(255,255,255,0.3);
+                  }
+                `}</style>
+                <div style={{display: 'flex', flexDirection: 'column', gap: '0.35rem'}}>
+                  {loading && (
+                    <div className="text-center text-white/60 py-8">Loading…</div>
+                  )}
+                  {!loading && error && (
+                    <div className="text-center text-red-400 py-8">{error}</div>
+                  )}
+                  {!loading && !error && entries.map((entry) => (
+                    <div
+                      key={entry.rank}
+                      style={{
+                        padding: '0.7rem 0.875rem',
+                        minHeight: '42px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between'
+                      }}
+                      className={`rounded-xl transition-all ${
+                        entry.isCurrentUser
+                          ? 'bg-gradient-to-r from-purple-500/20 to-pink-500/20'
+                          : 'bg-white/5 hover:bg-white/10'
+                      }`}
+                    >
+                      <div className="flex items-center" style={{gap: '0.7rem'}}>
+                        <div
+                          style={{
+                            minWidth: '32px',
+                            textAlign: 'center',
+                            fontSize: '0.8rem',
+                            fontWeight: 'bold'
+                          }}
+                          className={
+                            entry.rank === 1 ? 'text-yellow-400' :
+                            entry.rank === 2 ? 'text-gray-400' :
+                            entry.rank === 3 ? 'text-orange-400' :
+                            'text-white/60'
+                          }
+                        >
+                          {entry.rank === 1 && '🥇'}
+                          {entry.rank === 2 && '🥈'}
+                          {entry.rank === 3 && '🥉'}
+                          {entry.rank > 3 && `#${entry.rank}`}
+                        </div>
+                        <div
+                          style={{fontSize: '0.75rem', fontWeight: '500'}}
+                          className={entry.isCurrentUser ? 'text-purple-400' : 'text-white/80'}
+                        >
+                          {entry.username}
+                          {entry.isCurrentUser && <span className="ml-1 text-xs">(You)</span>}
+                        </div>
+                      </div>
+                      <div
+                        style={{fontSize: '0.8rem', fontWeight: 'bold', paddingLeft: '0.7rem'}}
+                        className={entry.isCurrentUser ? 'text-purple-400' : 'text-cyan-400'}
+                      >
+                        {entry.score.toLocaleString()}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
-              <div className="text-xl font-bold text-gradient from-neon-cyan to-neon-green">
-                {entry.score.toLocaleString()}
+
+              {/* Your Position */}
+              <div className="pt-2">
+                {!loading && !error && entries.length > 0 && (() => {
+                  const mine = entries.find(entry => entry.username === currentUser);
+
+                  if (!mine) {
+                    return null;
+                  }
+
+                  return (
+                    <div
+                      style={{
+                        padding: '0.7rem 0.875rem',
+                        minHeight: '42px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between'
+                      }}
+                      className="rounded-xl bg-gradient-to-r from-purple-500/20 to-pink-500/20"
+                    >
+                      <div className="flex items-center" style={{gap: '0.7rem'}}>
+                        <div style={{
+                          minWidth: '32px',
+                          textAlign: 'center',
+                          fontSize: '0.8rem',
+                          fontWeight: 'bold'
+                        }} className="text-purple-400">
+                          #{mine.rank}
+                        </div>
+                        <div style={{fontSize: '0.75rem', fontWeight: '500'}} className="text-purple-400">
+                          {mine.username}
+                        </div>
+                      </div>
+                      <div style={{fontSize: '0.8rem', fontWeight: 'bold', paddingLeft: '0.7rem'}} className="text-purple-400">
+                        {mine.score.toLocaleString()}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
-          ))}
+          </div>
         </div>
 
-        {/* Close button */}
-        <button
-          onClick={toggleLeaderboard}
-          className="absolute top-4 right-4 glass-effect rounded-full p-2 hover:bg-white/20 transition-all duration-200"
-        >
-          <svg
-            className="w-5 h-5 text-white"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
+        {/* Decorative elements */}
+        <div className="absolute -top-8 -left-8 w-16 h-16 bg-purple-500/20 rounded-full blur-2xl" />
+        <div className="absolute -bottom-8 -right-8 w-16 h-16 bg-cyan-500/20 rounded-full blur-2xl" />
       </div>
     </div>
   );

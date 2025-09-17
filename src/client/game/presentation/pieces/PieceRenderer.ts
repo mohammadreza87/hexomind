@@ -111,9 +111,9 @@ export class PieceRenderer {
       // Add spacing between piece hexagons (8% like the grid)
       const spacing = this.hexSize * 0.08;
       const dim = (this.hexSize - spacing) * 2;
-      const img = this.scene.add.image(relX, relY, RenderConfig.TEXTURE_KEYS.HEX_FILL_SVG).setOrigin(0.5);
+      const img = this.scene.add.image(relX, relY, RenderConfig.TEXTURE_KEYS.HEX_PIECE_GLASS).setOrigin(0.5);
       img.setDisplaySize(dim, dim);
-      // Ensure 30° rotation at runtime as well
+      // Apply 30° rotation for correct orientation
       img.setRotation(Math.PI / 6);
       img.setTint(pieceColor);
       this.container.add(img);
@@ -154,8 +154,8 @@ export class PieceRenderer {
    * Convert hex coordinates to pixel position
    */
   private hexToPixel(coord: HexCoordinates): { x: number, y: number } {
-    const x = this.hexSize * Math.sqrt(3) * (coord.q + coord.r / 2);
-    const y = this.hexSize * 1.5 * coord.r;
+    const x = this.hexSize * 1.5 * coord.q;
+    const y = this.hexSize * Math.sqrt(3) * (coord.r + coord.q / 2);
     return { x, y };
   }
 

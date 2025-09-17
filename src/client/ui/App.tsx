@@ -16,6 +16,8 @@ export const App: React.FC = () => {
     console.log('Try Again clicked!');
     // Reset the game via the game store
     resetGame();
+    // Set game state to playing
+    useGameStore.getState().setGameState('playing');
     // Trigger Phaser scene restart
     if (window.game) {
       const scene = window.game.scene.getScene('MainScene');

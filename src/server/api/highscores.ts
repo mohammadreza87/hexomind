@@ -4,12 +4,241 @@
 import { redis, context } from '@devvit/web/server';
 
 import type { LeaderboardEntry } from '../../shared/types/leaderboard';
+import {
+  ensureFakeDailyLeaderboard,
+  ensureFakeGlobalLeaderboard,
+  ensureFakeWeeklyLeaderboard,
+  getFakeMetadataKey
+} from './dummyData';
+import {
+  getDailyBucket,
+  getDailyFakeKey,
+  getDailyLeaderboardKey,
+  getWeeklyBucket,
+  getWeeklyFakeKey,
+  getWeeklyLeaderboardKey,
+  formatWeeklyBucket
+} from '../utils/time';
 
 export interface HighScoreEntry {
   username: string;
   score: number;
   timestamp: number;
   postId?: string;
+}
+
+const GLOBAL_REAL_KEY = 'leaderboard:global';
+const DAILY_EXPIRY_SECONDS = 3 * 24 * 60 * 60;
+const WEEKLY_EXPIRY_SECONDS = 6 * 24 * 60 * 60;
+
+interface LeaderboardEntryWithSource extends LeaderboardEntry {
+  isFake?: boolean;
+}
+
+function parseScore(value: unknown): number {
+  if (typeof value === 'number') {
+    return Math.max(0, Math.floor(value));
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+      return 0;
+    }
+    return Math.max(0, Math.floor(parsed));
+  }
+  return 0;
+}
+
+async function fetchRealEntries(key: string, limit: number): Promise<LeaderboardEntryWithSource[]> {
+  const upperBound = Math.max(limit - 1, 0);
+  const raw = await redis.zRange(key, 0, upperBound);
+
+  if (!raw || raw.length === 0) {
+    return [];
+  }
+
+  const entries = normalizeZRangeResult(raw).reverse();
+  const usernames = entries.map(item => item.member);
+  const scores = entries.map(item => parseScore(item.score));
+
+  const meta = await Promise.all(
+    usernames.map(username => redis.hGetAll(`highscore:meta:${username}`))
+  );
+
+  return usernames.map((username, index) => {
+    const metadata = meta[index];
+    const timestamp = metadata?.timestamp ? Number(metadata.timestamp) : Date.now();
+    const postId = metadata?.postId || undefined;
+
+    return {
+      rank: index + 1,
+      username,
+      score: scores[index],
+      timestamp,
+      postId,
+      isFake: false
+    } satisfies LeaderboardEntryWithSource;
+  });
+}
+
+function parseFakeMetadata(raw: unknown): { timestamp?: number } {
+  if (typeof raw !== 'string') {
+    return {};
+  }
+
+  try {
+    const data = JSON.parse(raw) as { timestamp?: number };
+    if (typeof data.timestamp === 'number') {
+      return { timestamp: data.timestamp };
+    }
+  } catch (error) {
+    console.warn('Failed to parse fake leaderboard metadata:', error);
+  }
+  return {};
+}
+
+function normalizeZRangeResult(raw: Array<{ member: string; score: number } | string>): Array<{ member: string; score: number }> {
+  if (raw.length === 0) {
+    return [];
+  }
+
+  const first = raw[0] as any;
+  if (typeof first === 'object' && first !== null && 'member' in first && 'score' in first) {
+    return raw as Array<{ member: string; score: number }>;
+  }
+
+  const normalized: Array<{ member: string; score: number }> = [];
+  for (let i = 0; i < raw.length; i += 2) {
+    const member = raw[i] as string;
+    const score = parseScore(raw[i + 1]);
+    normalized.push({ member, score });
+  }
+  return normalized;
+}
+
+async function fetchFakeEntries(
+  key: string,
+  metaKey: string,
+  limit: number
+): Promise<LeaderboardEntryWithSource[]> {
+  const upperBound = Math.max(limit - 1, 0);
+  const raw = await redis.zRange(key, 0, upperBound);
+
+  if (!raw || raw.length === 0) {
+    return [];
+  }
+
+  const metadata = await redis.hGetAll(metaKey);
+  const descending = normalizeZRangeResult(raw).reverse();
+
+  return descending.map((entry, index) => {
+    const metaRecord = metadata?.[entry.member];
+    const parsed = parseFakeMetadata(metaRecord);
+
+    return {
+      rank: index + 1,
+      username: entry.member,
+      score: parseScore(entry.score),
+      timestamp: parsed.timestamp ?? Date.now(),
+      isFake: true
+    } satisfies LeaderboardEntryWithSource;
+  });
+}
+
+function mergeEntries(
+  realEntries: LeaderboardEntryWithSource[],
+  fakeEntries: LeaderboardEntryWithSource[],
+  limit: number
+): LeaderboardEntryWithSource[] {
+  const merged: LeaderboardEntryWithSource[] = [];
+  let realIndex = 0;
+  let fakeIndex = 0;
+
+  while (merged.length < limit && (realIndex < realEntries.length || fakeIndex < fakeEntries.length)) {
+    const real = realEntries[realIndex];
+    const fake = fakeEntries[fakeIndex];
+
+    if (!fake || (real && real.score >= fake.score)) {
+      if (real) {
+        merged.push({ ...real, isFake: false });
+        realIndex++;
+      } else if (fake) {
+        merged.push({ ...fake, isFake: true });
+        fakeIndex++;
+      }
+    } else {
+      merged.push({ ...fake, isFake: true });
+      fakeIndex++;
+    }
+  }
+
+  merged.forEach((entry, index) => {
+    entry.rank = index + 1;
+  });
+
+  return merged;
+}
+
+async function computeReverseRank(key: string, member: string): Promise<number | null> {
+  const redisWithPossibleRank = redis as unknown as { zRevRank?: (key: string, member: string) => Promise<number | null> };
+  if (typeof redisWithPossibleRank.zRevRank === 'function') {
+    return redisWithPossibleRank.zRevRank(key, member);
+  }
+
+  const PAGE_SIZE = 200;
+  let offset = 0;
+
+  while (true) {
+    const slice = await redis.zRange(key, offset, offset + PAGE_SIZE - 1, { reverse: true });
+    if (!slice || slice.length === 0) {
+      return null;
+    }
+
+    for (let index = 0; index < slice.length; index++) {
+      if (slice[index] === member) {
+        return offset + index;
+      }
+    }
+
+    if (slice.length < PAGE_SIZE) {
+      return null;
+    }
+
+    offset += PAGE_SIZE;
+  }
+}
+
+async function appendUserEntryIfMissing(
+  entries: LeaderboardEntryWithSource[],
+  username: string,
+  key: string
+): Promise<LeaderboardEntryWithSource[]> {
+  if (entries.some(entry => entry.username === username)) {
+    return entries;
+  }
+
+  const score = await redis.zScore(key, username);
+  if (score === undefined || score === null) {
+    return entries;
+  }
+
+  const normalizedScore = parseScore(score);
+  const rankIndex = await computeReverseRank(key, username);
+  const metadata = await redis.hGetAll(`highscore:meta:${username}`);
+  const timestamp = metadata?.timestamp ? Number(metadata.timestamp) : Date.now();
+  const postId = metadata?.postId || undefined;
+
+  entries.push({
+    rank: rankIndex !== null ? rankIndex + 1 : entries.length + 1,
+    username,
+    score: normalizedScore,
+    timestamp,
+    postId,
+    isFake: false
+  });
+
+  entries.sort((a, b) => a.rank - b.rank);
+  return entries;
 }
 
 /**
@@ -31,19 +260,20 @@ export async function getUserHighScore(username: string): Promise<number> {
  */
 export async function setUserHighScore(username: string, score: number): Promise<boolean> {
   try {
+    const normalizedScore = Math.max(0, Math.floor(score));
     const key = `highscore:user:${username}`;
     const currentScore = await getUserHighScore(username);
 
-    if (score > currentScore) {
-      await redis.set(key, score.toString());
+    if (normalizedScore > currentScore) {
+      await redis.set(key, normalizedScore.toString());
 
       // Also update the leaderboard
-      await redis.zAdd('leaderboard:global', { score, member: username });
+      await redis.zAdd(GLOBAL_REAL_KEY, { score: normalizedScore, member: username });
 
       // Store metadata
       const metaKey = `highscore:meta:${username}`;
       await redis.hSet(metaKey, {
-        score: score.toString(),
+        score: normalizedScore.toString(),
         timestamp: Date.now().toString(),
         postId: context.postId || '',
         subreddit: context.subredditName || ''
@@ -62,36 +292,29 @@ export async function setUserHighScore(username: string, score: number): Promise
 /**
  * Get daily leaderboard
  */
-export async function getDailyLeaderboard(date: string, limit: number = 10): Promise<LeaderboardEntry[]> {
+export async function getDailyLeaderboard(date?: string, limit: number = 10, username?: string): Promise<LeaderboardEntry[]> {
   try {
-    const key = `leaderboard:daily:${date}`;
-    const scores = await redis.zRange(key, 0, limit - 1, {
-      reverse: true,
-      withScores: true
-    });
+    const bucket = date ?? getDailyBucket();
+    await ensureFakeDailyLeaderboard(bucket);
 
-    if (!scores || scores.length === 0) {
-      return [];
+    const realKey = `leaderboard:daily:${bucket}`;
+    const fakeKey = `leaderboard:daily:${bucket}:fake`;
+    const metaKey = getFakeMetadataKey('daily', bucket);
+
+    const overscan = Math.max(limit * 2, limit + 5);
+
+    const [realEntries, fakeEntries] = await Promise.all([
+      fetchRealEntries(realKey, overscan),
+      fetchFakeEntries(fakeKey, metaKey, overscan)
+    ]);
+
+    let leaderboard = mergeEntries(realEntries, fakeEntries, limit);
+
+    if (username) {
+      leaderboard = await appendUserEntryIfMissing(leaderboard, username, realKey);
     }
 
-    const entries: LeaderboardEntry[] = [];
-    let rank = 1;
-
-    for (let i = 0; i < scores.length; i += 2) {
-      const username = scores[i] as string;
-      const score = parseInt(scores[i + 1] as string);
-
-      entries.push({
-        rank,
-        username,
-        score,
-        timestamp: Date.now(),
-      });
-
-      rank++;
-    }
-
-    return entries;
+    return leaderboard;
   } catch (error) {
     console.error('Error getting daily leaderboard:', error);
     return [];
@@ -103,8 +326,8 @@ export async function getDailyLeaderboard(date: string, limit: number = 10): Pro
  */
 export async function updateDailyLeaderboard(username: string, score: number): Promise<void> {
   try {
-    const today = new Date().toISOString().split('T')[0];
-    const key = `leaderboard:daily:${today}`;
+    const key = getDailyLeaderboardKey();
+    const normalizedScore = Math.max(0, Math.floor(score));
 
     const existingScore = await redis.zScore(key, username);
     const parsedScore = typeof existingScore === 'number'
@@ -113,63 +336,45 @@ export async function updateDailyLeaderboard(username: string, score: number): P
         ? parseFloat(existingScore)
         : null;
 
-    if (parsedScore === null || Number.isNaN(parsedScore) || score > parsedScore) {
-      await redis.zAdd(key, { score, member: username });
+    if (parsedScore === null || Number.isNaN(parsedScore) || normalizedScore > parsedScore) {
+      await redis.zAdd(key, { score: normalizedScore, member: username });
     }
 
-    // Set expiry for daily leaderboard (7 days)
-    await redis.expire(key, 7 * 24 * 60 * 60);
+    // Keep a rolling window of daily leaderboards for a few days
+    await redis.expire(key, DAILY_EXPIRY_SECONDS);
   } catch (error) {
     console.error('Error updating daily leaderboard:', error);
   }
 }
 
 /**
- * Get current week number and year
- */
-function getWeekInfo(): { week: number; year: number } {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), 0, 1);
-  const diff = now.getTime() - start.getTime();
-  const oneWeek = 1000 * 60 * 60 * 24 * 7;
-  const week = Math.floor(diff / oneWeek) + 1;
-  return { week, year: now.getFullYear() };
-}
-
-/**
  * Get weekly leaderboard
  */
-export async function getWeeklyLeaderboard(limit: number = 10): Promise<LeaderboardEntry[]> {
+export async function getWeeklyLeaderboard(limit: number = 10, username?: string): Promise<LeaderboardEntry[]> {
   try {
-    const { week, year } = getWeekInfo();
-    const key = `leaderboard:weekly:${year}:${week}`;
-    const scores = await redis.zRange(key, 0, limit - 1, {
-      reverse: true,
-      withScores: true
-    });
+    const now = new Date();
+    const bucket = getWeeklyBucket(now);
+    const bucketLabel = formatWeeklyBucket(bucket);
+    await ensureFakeWeeklyLeaderboard(bucket);
 
-    if (!scores || scores.length === 0) {
-      return [];
+    const key = getWeeklyLeaderboardKey(now);
+    const fakeKey = getWeeklyFakeKey(now);
+    const metaKey = getFakeMetadataKey('weekly', bucketLabel);
+
+    const overscan = Math.max(limit * 2, limit + 10);
+
+    const [realEntries, fakeEntries] = await Promise.all([
+      fetchRealEntries(key, overscan),
+      fetchFakeEntries(fakeKey, metaKey, overscan)
+    ]);
+
+    let leaderboard = mergeEntries(realEntries, fakeEntries, limit);
+
+    if (username) {
+      leaderboard = await appendUserEntryIfMissing(leaderboard, username, key);
     }
 
-    const entries: LeaderboardEntry[] = [];
-    let rank = 1;
-
-    for (let i = 0; i < scores.length; i += 2) {
-      const username = scores[i] as string;
-      const score = parseInt(scores[i + 1] as string);
-
-      entries.push({
-        rank,
-        username,
-        score,
-        timestamp: Date.now(),
-      });
-
-      rank++;
-    }
-
-    return entries;
+    return leaderboard;
   } catch (error) {
     console.error('Error getting weekly leaderboard:', error);
     return [];
@@ -181,8 +386,8 @@ export async function getWeeklyLeaderboard(limit: number = 10): Promise<Leaderbo
  */
 export async function updateWeeklyLeaderboard(username: string, score: number): Promise<void> {
   try {
-    const { week, year } = getWeekInfo();
-    const key = `leaderboard:weekly:${year}:${week}`;
+    const key = getWeeklyLeaderboardKey();
+    const normalizedScore = Math.max(0, Math.floor(score));
 
     const existingScore = await redis.zScore(key, username);
     const parsedScore = typeof existingScore === 'number'
@@ -191,12 +396,12 @@ export async function updateWeeklyLeaderboard(username: string, score: number): 
         ? parseFloat(existingScore)
         : null;
 
-    if (parsedScore === null || Number.isNaN(parsedScore) || score > parsedScore) {
-      await redis.zAdd(key, { score, member: username });
+    if (parsedScore === null || Number.isNaN(parsedScore) || normalizedScore > parsedScore) {
+      await redis.zAdd(key, { score: normalizedScore, member: username });
     }
 
-    // Set expiry for weekly leaderboard (30 days)
-    await redis.expire(key, 30 * 24 * 60 * 60);
+    // Keep a rolling window of recent weekly leaderboards
+    await redis.expire(key, WEEKLY_EXPIRY_SECONDS);
   } catch (error) {
     console.error('Error updating weekly leaderboard:', error);
   }
@@ -205,47 +410,26 @@ export async function updateWeeklyLeaderboard(username: string, score: number): 
 /**
  * Get global leaderboard
  */
-export async function getGlobalLeaderboard(limit: number = 10): Promise<LeaderboardEntry[]> {
+export async function getGlobalLeaderboard(limit: number = 10, username?: string): Promise<LeaderboardEntry[]> {
   try {
-    console.log(`Getting global leaderboard, limit: ${limit}`);
+    await ensureFakeGlobalLeaderboard();
 
-    // Get top scores from sorted set
-    const scores = await redis.zRange('leaderboard:global', 0, limit - 1, {
-      reverse: true,
-      withScores: true
-    });
+    const fakeKey = 'leaderboard:global:fake';
+    const metaKey = getFakeMetadataKey('global');
+    const overscan = Math.max(limit * 2, 50);
 
-    console.log(`Redis zrange result:`, scores);
+    const [realEntries, fakeEntries] = await Promise.all([
+      fetchRealEntries(GLOBAL_REAL_KEY, overscan),
+      fetchFakeEntries(fakeKey, metaKey, overscan)
+    ]);
 
-    if (!scores || scores.length === 0) {
-      console.log('No scores found in global leaderboard');
-      return [];
+    let leaderboard = mergeEntries(realEntries, fakeEntries, limit);
+
+    if (username) {
+      leaderboard = await appendUserEntryIfMissing(leaderboard, username, GLOBAL_REAL_KEY);
     }
 
-    // Transform to leaderboard entries
-    const entries: LeaderboardEntry[] = [];
-    let rank = 1;
-
-    for (let i = 0; i < scores.length; i += 2) {
-      const username = scores[i] as string;
-      const score = parseInt(scores[i + 1] as string);
-
-      // Get metadata
-      const metaKey = `highscore:meta:${username}`;
-      const metadata = await redis.hGetAll(metaKey);
-
-      entries.push({
-        rank,
-        username,
-        score,
-        timestamp: metadata?.timestamp ? parseInt(metadata.timestamp) : Date.now(),
-        postId: metadata?.postId || undefined
-      });
-
-      rank++;
-    }
-
-    return entries;
+    return leaderboard;
   } catch (error) {
     console.error('Error getting global leaderboard:', error);
     return [];
@@ -321,7 +505,7 @@ export async function updateSubredditLeaderboard(username: string, score: number
  */
 export async function getUserRank(username: string): Promise<number | null> {
   try {
-    const rank = await redis.zRevRank('leaderboard:global', username);
+    const rank = await computeReverseRank(GLOBAL_REAL_KEY, username);
     return rank !== null ? rank + 1 : null; // Convert 0-based to 1-based
   } catch (error) {
     console.error('Error getting user rank:', error);
@@ -339,12 +523,12 @@ export async function getGameStatistics(): Promise<{
   topScore: number;
 }> {
   try {
-    const totalPlayers = await redis.zCard('leaderboard:global') || 0;
+    const totalPlayers = await redis.zCard(GLOBAL_REAL_KEY) || 0;
     const totalGamesKey = 'stats:total_games';
     const totalGames = parseInt(await redis.get(totalGamesKey) || '0');
 
     // Get top score
-    const topScores = await redis.zRange('leaderboard:global', 0, 0, {
+    const topScores = await redis.zRange(GLOBAL_REAL_KEY, 0, 0, {
       reverse: true,
       withScores: true
     });

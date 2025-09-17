@@ -11,9 +11,6 @@ import { GameOverService } from '../core/services/GameOverService';
 import { RenderConfig } from '../config/RenderConfig';
 import { errorBoundary } from '../../utils/ErrorBoundary';
 import { highScoreService } from '../../services/HighScoreService';
-import { LeaderboardUI } from '../presentation/ui/LeaderboardUI';
-import { ModernLeaderboardUI } from '../presentation/ui/ModernLeaderboardUI';
-import { ToastUI } from '../presentation/ui/ToastUI';
 import { SharpText } from '../utils/SharpText';
 import { DS } from '../config/DesignSystem';
 import { createGradientText } from '../presentation/ui/GradientText';
@@ -38,9 +35,6 @@ export class MainScene extends Phaser.Scene {
   // UI Elements
   private scoreText!: Phaser.GameObjects.Text;
   private highScoreText!: Phaser.GameObjects.Text;
-  private leaderboardUI!: LeaderboardUI;
-  private modernLeaderboardUI!: ModernLeaderboardUI;
-  private toast!: ToastUI;
   private responsiveMetrics!: ResponsiveMetrics;
 
   // Game State
@@ -81,8 +75,10 @@ export class MainScene extends Phaser.Scene {
       this.load.image(RenderConfig.TEXTURE_KEYS.HEX_FILLED, RenderConfig.ASSETS.HEX_FILLED);
       this.load.image(RenderConfig.TEXTURE_KEYS.HEX_PIECE, RenderConfig.ASSETS.HEX_PIECE);
       // Load SVGs for base (grid) and fill (pieces) with higher resolution
-      this.load.svg(RenderConfig.TEXTURE_KEYS.HEX_BASE_SVG, 'assets/hex-base.svg', { width: 1024, height: 1024 });
-      this.load.svg(RenderConfig.TEXTURE_KEYS.HEX_FILL_SVG, 'assets/hex-fill.svg', { width: 1024, height: 1024 });
+      this.load.svg(RenderConfig.TEXTURE_KEYS.HEX_BASE_SVG, '/assets/hex-base.svg', { width: 1024, height: 1024 });
+      this.load.svg(RenderConfig.TEXTURE_KEYS.HEX_FILL_SVG, '/assets/hex-fill.svg', { width: 1024, height: 1024 });
+      // Load glassmorphism piece SVG
+      this.load.svg(RenderConfig.TEXTURE_KEYS.HEX_PIECE_GLASS, '/assets/hex-piece-glass.svg', { width: 512, height: 512 });
 
       // Show loading progress
       this.load.on('progress', (value: number) => {
@@ -94,8 +90,8 @@ export class MainScene extends Phaser.Scene {
       });
     } else if (RenderConfig.USE_SVG_HEXAGONS) {
       // Load SVG assets with high resolution for crisp rendering
-      this.load.svg(RenderConfig.TEXTURE_KEYS.HEX_BASE, 'assets/hex-base.svg', { width: 512, height: 512 });
-      this.load.svg(RenderConfig.TEXTURE_KEYS.HEX_FILL, 'assets/hex-fill.svg', { width: 512, height: 512 });
+      this.load.svg(RenderConfig.TEXTURE_KEYS.HEX_BASE, '/assets/hex-base.svg', { width: 512, height: 512 });
+      this.load.svg(RenderConfig.TEXTURE_KEYS.HEX_FILL, '/assets/hex-fill.svg', { width: 512, height: 512 });
 
       this.load.on('progress', (value: number) => {
         console.log('Loading SVG:', Math.round(value * 100) + '%');
@@ -152,7 +148,6 @@ export class MainScene extends Phaser.Scene {
     // Create UI
     this.createUI();
     // Toast UI
-    this.toast = new ToastUI(this);
 
     // Setup interactions
     this.setupInteractions();
@@ -267,11 +262,7 @@ export class MainScene extends Phaser.Scene {
     // Create empty text to prevent null reference errors
     this.highScoreText = this.add.text(0, 0, '', {}).setVisible(false);
 
-    // Create modern leaderboard UI (initially hidden)
-    this.modernLeaderboardUI = new ModernLeaderboardUI(this);
-
-    // Keep old leaderboard for compatibility
-    this.leaderboardUI = new LeaderboardUI(this);
+    // Leaderboard is now handled by React component
 
     // Game over UI is now handled by React component
   }
@@ -329,8 +320,11 @@ export class MainScene extends Phaser.Scene {
     this.moveCount = 0;
     this.updateScore(0);
 
-    // Clear board
+    // Clear board model
     this.boardRenderer.getGridModel().reset();
+
+    // Regenerate the board visually to clear all placed pieces
+    this.boardRenderer.regenerateBoard();
 
     // Clear saved game state
     GameStateManager.clearGameState();
@@ -338,8 +332,6 @@ export class MainScene extends Phaser.Scene {
     // Generate initial pieces
     this.generateNewPieces();
 
-    // Show welcome animation
-    this.showWelcomeAnimation();
   }
 
   /**
@@ -382,10 +374,7 @@ export class MainScene extends Phaser.Scene {
 
       console.log(`Game restored: Score ${this.score}, ${savedGame.grid.length} cells, ${savedGame.pieces.filter(p => !p.used).length} pieces remaining`);
 
-      // Show toast
-      if (this.toast) {
-        this.toast.show('Game restored');
-      }
+      // Game restored - no toast needed
 
       return true;
     } catch (error) {
@@ -536,8 +525,7 @@ export class MainScene extends Phaser.Scene {
       window.gameStore.getState().setHighScore(this.highScore);
     }
 
-    // Show 'no more space' toast
-    this.toast.show('No more space', { type: 'important' });
+    // No more space - could add simple text notification here if needed
   }
 
   /**
@@ -749,10 +737,10 @@ export class MainScene extends Phaser.Scene {
       gameBridge.updateCombo(0);
     });
 
-    // Add camera shake effect based on lines cleared
-    const shakeIntensity = 0.003 + (lines.length * 0.002);
-    const shakeDuration = 200 + (lines.length * 50);
-    this.cameras.main.shake(shakeDuration, shakeIntensity, true);
+    // Camera shake disabled
+    // const shakeIntensity = 0.003 + (lines.length * 0.002);
+    // const shakeDuration = 200 + (lines.length * 50);
+    // this.cameras.main.shake(shakeDuration, shakeIntensity, true);
 
     // Animate the line clearing with smooth wave effect
     await this.boardRenderer.animateLineClear(lines);
@@ -830,53 +818,16 @@ export class MainScene extends Phaser.Scene {
    * Show lines cleared effect
    */
   private showLinesClearedEffect(lineCount: number, points: number): void {
-    // Create combo text
-    let comboText = '';
-    if (lineCount === 1) {
-      comboText = 'LINE CLEAR!';
-    } else if (lineCount === 2) {
-      comboText = 'DOUBLE!';
-    } else if (lineCount === 3) {
-      comboText = 'TRIPLE!';
-    } else {
-      comboText = `${lineCount}x COMBO!`;
-    }
-
-    // Use the new ToastUI system with score type for beautiful gradient text
-    if (this.toastUI) {
-      this.toastUI.show(comboText, {
-        type: 'score',
-        score: points,
-        duration: 150,
-        hold: 600
-      });
-    }
+    // Completely disabled - no visual effects at all
+    return;
   }
 
   /**
    * Show welcome animation
    */
   private showWelcomeAnimation(): void {
-    const theme = this.themeProvider.getTheme();
-    const { width, height } = this.cameras.main;
-
-    const welcomeText = this.add.text(width / 2, height / 2, 'TAP TO PLACE PIECES', {
-      fontSize: '24px',
-      fontFamily: DS.TYPOGRAPHY.fontFamily.body,
-      fontStyle: '500 normal',
-      color: this.themeProvider.toCSS(theme.textSecondary)
-    }).setOrigin(0.5).setAlpha(0).setDepth(150);
-
-    // Fade in and out
-    this.tweens.add({
-      targets: welcomeText,
-      alpha: { from: 0, to: 0.8 },
-      duration: 1000,
-      yoyo: true,
-      hold: 1000,
-      ease: 'Power2',
-      onComplete: () => welcomeText.destroy()
-    });
+    // Welcome animation disabled - no text shown
+    return;
   }
 
   /**

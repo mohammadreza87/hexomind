@@ -11,6 +11,7 @@ type LeaderboardPayload = Partial<LeaderboardEntry> & {
   rank?: number | string | null;
   username?: string | null;
   timestamp?: number | string | null;
+  isFake?: boolean | null;
 };
 
 const FALLBACK_USERNAME_PREFIX = 'player';
@@ -76,6 +77,7 @@ export function normalizeLeaderboardPayload(
         timestamp,
         postId,
         isCurrentUser: username === currentUsername,
+        isFake: raw.isFake === true
       });
     }
   });
@@ -90,7 +92,9 @@ export function normalizeLeaderboardPayload(
   });
 
   normalized.forEach((entry, index) => {
-    entry.rank = index + 1;
+    if (!Number.isFinite(entry.rank) || entry.rank <= 0) {
+      entry.rank = index + 1;
+    }
     entry.isCurrentUser = entry.username === currentUsername;
   });
 
@@ -114,7 +118,12 @@ class LeaderboardService {
       return cached.map(entry => ({ ...entry, isCurrentUser: entry.username === currentUsername }));
     }
 
-    const response = await fetch(`/api/leaderboard?type=${period}&limit=${limit}`);
+    const params = new URLSearchParams({ type: period, limit: String(limit) });
+    if (currentUsername) {
+      params.set('username', currentUsername);
+    }
+
+    const response = await fetch(`/api/leaderboard?${params.toString()}`);
     if (!response.ok) {
       throw new Error(`Failed to fetch leaderboard (${response.status})`);
     }

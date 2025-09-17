@@ -6,6 +6,7 @@ export interface LeaderboardEntry {
   score: number;
   timestamp?: number;
   postId?: string;
+  isFake?: boolean;
 }
 
 export interface LeaderboardResponse {

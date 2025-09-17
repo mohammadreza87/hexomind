@@ -51,7 +51,7 @@ export const SettingsPanel: React.FC = () => {
     );
   }, []);
 
-  const handleClose = () => {
+  const handleClose = (afterClose?: () => void) => {
     // Animate out before closing
     gsap.to('.settings-panel', {
       scale: 0.9,
@@ -59,7 +59,10 @@ export const SettingsPanel: React.FC = () => {
       y: -30,
       duration: 0.3,
       ease: 'power2.in',
-      onComplete: () => toggleSettings(),
+      onComplete: () => {
+        toggleSettings();
+        afterClose?.();
+      },
     });
   };
 
@@ -103,10 +106,9 @@ export const SettingsPanel: React.FC = () => {
   };
 
   const handleShowLeaderboard = () => {
-    handleClose();
-    setTimeout(() => {
+    handleClose(() => {
       setShowLeaderboard(true);
-    }, 300);
+    });
   };
 
   const handleReplay = () => {
@@ -162,8 +164,8 @@ export const SettingsPanel: React.FC = () => {
       {/* Panel with better width control */}
       <div className="settings-panel relative w-full max-w-xs">
         {/* Glass panel with gradient border */}
-        <div className="relative p-1 rounded-2xl bg-gradient-to-br from-purple-500/30 via-pink-500/30 to-cyan-500/30">
-          <div className="relative bg-gray-900/90 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/10">
+        <div className="relative rounded-2xl">
+          <div className="relative bg-gray-900/90 backdrop-blur-xl rounded-2xl shadow-2xl">
             {/* Close button */}
             <button
               onClick={handleClose}
@@ -174,44 +176,47 @@ export const SettingsPanel: React.FC = () => {
               </svg>
             </button>
 
-            {/* Content with MORE padding */}
-            <div className="settings-content px-10 py-12">
+            {/* Content with normal padding */}
+            <div className="settings-content" style={{padding: '2rem 2.5rem'}}>
 
-              {/* Title with more space */}
-              <div className="text-center mb-10">
+              {/* Title */}
+              <div className="text-center" style={{marginBottom: '2rem'}}>
                 <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-400 via-pink-400 to-cyan-400 bg-clip-text text-transparent">
                   SETTINGS
                 </h1>
               </div>
 
-              {/* Username Input Section with more space */}
-              <div className="mb-10">
-                <label className="text-white/80 text-xs font-semibold uppercase tracking-wider block mb-4">Username</label>
-                <div className="flex gap-3">
+              {/* Username Input Section */}
+              <div style={{marginBottom: '2rem'}}>
+                <label className="text-white/80 text-xs font-semibold uppercase tracking-wider block" style={{marginBottom: '0.75rem'}}>Username</label>
+                <div style={{display: 'flex', flexDirection: 'column', gap: '0.75rem'}}>
                   <input
                     type="text"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     placeholder="Enter your name"
                     maxLength={20}
-                    className="flex-1 px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 text-sm"
+                    style={{padding: '0.75rem 1.5rem'}}
+                    className="w-full rounded-xl bg-white/5 text-white placeholder-white/30 focus:outline-none  text-sm text-center"
                   />
                   <button
                     onClick={handleSaveUsername}
-                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30 text-purple-400 text-sm font-medium hover:bg-purple-500/30 transition-colors"
+                    style={{padding: '0.75rem 1.5rem'}}
+                    className="w-full rounded-xl bg-gradient-to-r from-purple-500/20 to-pink-500/20 backdrop-blur-sm  text-purple-400 font-bold text-sm hover:bg-purple-500/30 transform transition-all duration-200 hover:scale-105 active:scale-95"
                   >
-                    Save
+                    Save Username
                   </button>
                 </div>
               </div>
 
-              {/* Action Buttons Section with more spacing */}
-              <div className="space-y-5">
+              {/* Action Buttons Section */}
+              <div style={{display: 'flex', flexDirection: 'column', gap: '1rem'}}>
                 {/* Leaderboard Button */}
                 <div className="flex justify-center">
                   <button
                     onClick={handleShowLeaderboard}
-                    className="w-full py-5 px-4 rounded-xl bg-gradient-to-r from-cyan-500/20 to-blue-500/20 backdrop-blur-sm border border-cyan-500/30 text-cyan-400 font-bold text-sm hover:bg-cyan-500/30 transform transition-all duration-200 hover:scale-105 active:scale-95"
+                    style={{padding: '0.75rem 1.5rem'}}
+                    className="w-full rounded-xl bg-gradient-to-r from-cyan-500/20 to-blue-500/20 backdrop-blur-sm  text-cyan-400 font-bold text-sm hover:bg-cyan-500/30 transform transition-all duration-200 hover:scale-105 active:scale-95"
                   >
                     <span className="flex items-center justify-center gap-2">
                       <span>🏆</span>
@@ -224,7 +229,8 @@ export const SettingsPanel: React.FC = () => {
                 <div className="flex justify-center">
                   <button
                     onClick={handleReplay}
-                    className="w-full py-5 px-4 rounded-xl bg-gradient-to-r from-purple-500/20 to-pink-500/20 backdrop-blur-sm border border-purple-500/30 text-purple-400 font-bold text-sm hover:bg-purple-500/30 transform transition-all duration-200 hover:scale-105 active:scale-95"
+                    style={{padding: '0.75rem 1.5rem'}}
+                    className="w-full rounded-xl bg-gradient-to-r from-purple-500/20 to-pink-500/20 backdrop-blur-sm  text-purple-400 font-bold text-sm hover:bg-purple-500/30 transform transition-all duration-200 hover:scale-105 active:scale-95"
                   >
                     <span className="flex items-center justify-center gap-2">
                       <span>🔄</span>
@@ -233,11 +239,12 @@ export const SettingsPanel: React.FC = () => {
                   </button>
                 </div>
 
-                {/* Reset Data Button with extra margin */}
-                <div className="flex justify-center pt-6">
+                {/* Reset Data Button */}
+                <div className="flex justify-center" style={{marginTop: '1.5rem'}}>
                   <button
                     onClick={handleReset}
-                    className="w-full py-5 px-4 rounded-xl bg-gradient-to-r from-red-500/20 to-orange-500/20 backdrop-blur-sm border border-red-500/30 text-red-400 font-bold text-sm hover:bg-red-500/30 transform transition-all duration-200 hover:scale-105 active:scale-95"
+                    style={{padding: '0.75rem 1.5rem'}}
+                    className="w-full rounded-xl bg-gradient-to-r from-red-500/20 to-orange-500/20 backdrop-blur-sm  text-red-400 font-bold text-sm hover:bg-red-500/30 transform transition-all duration-200 hover:scale-105 active:scale-95"
                   >
                     <span className="flex items-center justify-center gap-2">
                       <span>🗑️</span>
