@@ -1,15 +1,13 @@
 import * as Phaser from 'phaser';
 import { UIComponent } from './components/UIComponent';
 import { highScoreService } from '../../../services/HighScoreService';
+import {
+  leaderboardService,
+  type LeaderboardViewEntry,
+  type LeaderboardViewPeriod,
+} from '../../../services/LeaderboardService';
 
-interface LeaderboardEntry {
-  rank: number;
-  username: string;
-  score: number;
-  isCurrentUser?: boolean;
-}
-
-type LeaderboardType = 'daily' | 'weekly' | 'allTime';
+type LeaderboardType = LeaderboardViewPeriod;
 
 /**
  * Modern Leaderboard UI with tabs, animations, and beautiful design
@@ -41,7 +39,7 @@ export class ModernLeaderboardUI extends UIComponent {
   private playerPositionText: Phaser.GameObjects.Text;
 
   private isVisible: boolean = false;
-  private entries: Map<LeaderboardType, LeaderboardEntry[]> = new Map();
+  private entries: Map<LeaderboardType, LeaderboardViewEntry[]> = new Map();
   private isLoading: Map<LeaderboardType, boolean> = new Map();
   private currentPlayerScore: number = 0;
   private scrollY: number = 0;
@@ -212,7 +210,7 @@ export class ModernLeaderboardUI extends UIComponent {
     this.tabContainer.add(this.weeklyTab);
 
     // All Time tab
-    this.allTimeTab = this.createTab(scene, tabWidth + 10, 0, 'ALL TIME', 'allTime', tabWidth);
+    this.allTimeTab = this.createTab(scene, tabWidth + 10, 0, 'ALL TIME', 'global', tabWidth);
     this.tabContainer.add(this.allTimeTab);
 
     this.add(this.tabContainer);
@@ -296,7 +294,7 @@ export class ModernLeaderboardUI extends UIComponent {
       case 'weekly':
         targetX = this.weeklyTab.x;
         break;
-      case 'allTime':
+      case 'global':
         targetX = this.allTimeTab.x;
         break;
     }
@@ -317,7 +315,7 @@ export class ModernLeaderboardUI extends UIComponent {
    */
   private createEntryRow(
     scene: Phaser.Scene,
-    entry: LeaderboardEntry,
+    entry: LeaderboardViewEntry,
     y: number,
     width: number
   ): Phaser.GameObjects.Container {
@@ -369,7 +367,7 @@ export class ModernLeaderboardUI extends UIComponent {
     const scoreColor = entry.rank <= 3 ?
       [palette.gold, palette.silver, palette.bronze][entry.rank - 1] : palette.gray;
 
-    const score = scene.add.text(width / 2 - 50, 0, entry.score.toLocaleString(), {
+    const score = scene.add.text(width / 2 - 50, 0, this.formatScore(entry.score), {
       fontSize: this.getFontSize('lg'),
       fontFamily: displayFont,
       fontStyle: '600 normal',
@@ -383,7 +381,7 @@ export class ModernLeaderboardUI extends UIComponent {
   /**
    * Generate client-side dummy data
    */
-  private generateDummyData(type: LeaderboardType, currentUsername: string): LeaderboardEntry[] {
+  private generateDummyData(type: LeaderboardType, currentUsername: string): LeaderboardViewEntry[] {
     const usernames = [
       'PixelMaster2025', 'NeonKnight', 'HexWizard', 'CyberQueen', 'RetroGamer42',
       'ShadowNinja', 'GhostPlayer', 'DragonSlayer', 'PhoenixRising', 'ThunderBolt',
@@ -394,7 +392,7 @@ export class ModernLeaderboardUI extends UIComponent {
     const maxScore = type === 'daily' ? 15000 : (type === 'weekly' ? 25000 : 40000);
     const count = type === 'daily' ? 10 : (type === 'weekly' ? 15 : 20);
 
-    const entries: LeaderboardEntry[] = [];
+    const entries: LeaderboardViewEntry[] = [];
 
     // Generate dummy entries
     for (let i = 0; i < Math.min(count, usernames.length); i++) {
@@ -403,7 +401,8 @@ export class ModernLeaderboardUI extends UIComponent {
         rank: i + 1,
         username: usernames[i],
         score: score,
-        isCurrentUser: false
+        isCurrentUser: false,
+        timestamp: Date.now()
       });
     }
 
@@ -415,7 +414,8 @@ export class ModernLeaderboardUI extends UIComponent {
       rank: userRank,
       username: currentUsername,
       score: currentUserScore,
-      isCurrentUser: true
+      isCurrentUser: true,
+      timestamp: Date.now()
     });
 
     // Adjust ranks
@@ -429,6 +429,18 @@ export class ModernLeaderboardUI extends UIComponent {
   /**
    * Load leaderboard data
    */
+  private formatScore(score: number | null | undefined): string {
+    if (typeof score === 'number' && Number.isFinite(score)) {
+      const safeScore = Math.max(0, Math.floor(score));
+      return safeScore.toLocaleString();
+    }
+
+    return '0';
+  }
+
+  /**
+   * Load leaderboard data
+   */
   private async loadLeaderboard(type: LeaderboardType): Promise<void> {
     // Show loading state
     this.entriesContainer.removeAll(true);
@@ -436,8 +448,10 @@ export class ModernLeaderboardUI extends UIComponent {
     this.emptyText.setVisible(false);
 
     // Check cache
-    if (this.entries.has(type) && !this.isLoading.get(type)) {
-      this.displayEntries(this.entries.get(type)!);
+    const cached = this.entries.get(type) || leaderboardService.getCached(type);
+    if (cached && cached.length > 0 && !this.isLoading.get(type)) {
+      this.entries.set(type, cached);
+      this.displayEntries(cached);
       return;
     }
 
@@ -448,22 +462,12 @@ export class ModernLeaderboardUI extends UIComponent {
       const currentUsername = await this.getCurrentUsername();
 
       // Fetch from API - get more entries to ensure user appears
-      const apiType = type === 'allTime' ? 'global' : type;
-      const limit = type === 'allTime' ? 20 : 15;
+      const limit = type === 'global' ? 20 : 15;
 
-      let entries: LeaderboardEntry[] = [];
+      let entries: LeaderboardViewEntry[] = [];
 
       try {
-        const response = await fetch(`/api/leaderboard?type=${apiType}&limit=${limit}`);
-        const data = await response.json();
-
-        if (data.leaderboard && data.leaderboard.length > 0) {
-          // Use server data if available
-          entries = data.leaderboard.map((entry: any) => ({
-            ...entry,
-            isCurrentUser: entry.username === currentUsername
-          }));
-        }
+        entries = await leaderboardService.fetchLeaderboard(type, limit, currentUsername);
       } catch (fetchError) {
         console.warn('Failed to fetch leaderboard from server:', fetchError);
       }
@@ -472,6 +476,7 @@ export class ModernLeaderboardUI extends UIComponent {
       if (entries.length === 0) {
         console.log('Using client-side dummy data for leaderboard');
         entries = this.generateDummyData(type, currentUsername);
+        leaderboardService.primeCache(type, entries);
       }
 
       this.entries.set(type, entries);
@@ -489,7 +494,7 @@ export class ModernLeaderboardUI extends UIComponent {
   /**
    * Display leaderboard entries
    */
-  private displayEntries(entries: LeaderboardEntry[]): void {
+  private displayEntries(entries: LeaderboardViewEntry[]): void {
     this.loadingText.setVisible(false);
     this.entriesContainer.removeAll(true);
 
@@ -572,7 +577,7 @@ export class ModernLeaderboardUI extends UIComponent {
       const currentUsername = await this.getCurrentUsername();
 
       // Update each cached leaderboard with the new score
-      ['daily', 'weekly', 'allTime'].forEach(type => {
+      ['daily', 'weekly', 'global'].forEach(type => {
         const cached = this.entries.get(type as LeaderboardType);
         if (cached) {
           // Find and update current user's score
@@ -687,7 +692,7 @@ export class ModernLeaderboardUI extends UIComponent {
   /**
    * Update player position based on score
    */
-  private async updatePlayerPosition(entries: LeaderboardEntry[]): Promise<void> {
+  private async updatePlayerPosition(entries: LeaderboardViewEntry[]): Promise<void> {
     const palette = this.getPalette();
 
     try {

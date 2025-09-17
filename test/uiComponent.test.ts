@@ -114,6 +114,14 @@ vi.mock('../src/client/services/HighScoreService', () => ({
   },
 }));
 
+vi.mock('../src/client/services/LeaderboardService', () => ({
+  leaderboardService: {
+    fetchLeaderboard: vi.fn(async () => []),
+    getCached: vi.fn(() => null),
+    primeCache: vi.fn(),
+  },
+}));
+
 import * as Phaser from 'phaser';
 import { DS } from '../src/client/game/config/DesignSystem';
 import { UIComponent } from '../src/client/game/presentation/ui/components/UIComponent';
