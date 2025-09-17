@@ -17,7 +17,7 @@ export class PieceRenderer {
 
   private hexagons: Phaser.GameObjects.Image[] = [];
   private shadow: Phaser.GameObjects.Graphics;
-  private glow: Phaser.GameObjects.Graphics;
+  // Glow removed - no longer needed
   private depthEffects: DepthEffects;
   private readonly cellOffsets: Phaser.Math.Vector2[] = [];
 
@@ -33,15 +33,15 @@ export class PieceRenderer {
 
     // Calculate dynamic hex size based on screen
     const { width, height } = scene.cameras.main;
-    // Make pieces fit within the smaller slot placeholders
-    // Start with a base size that should work for most pieces
-    const slotSize = Math.min(100, Math.max(60, width / 8)); // Match PieceTray calculation
+    // For 1080x1920 resolution, use larger sizes
+    const slotSize = 150; // Larger slots for 1080p
 
     // Calculate normal size for board (matching board hexagon size)
-    this.normalHexSize = Math.min(50, Math.max(20, height * 0.45 / (1.5 * 7))); // Match board sizing
+    // Should match the board's hex size calculation
+    this.normalHexSize = 70; // Good size for 1080p board
 
     // Base hex size for tray - will be adjusted if piece is too large
-    this.hexSize = slotSize / 6; // Start with reasonable size
+    this.hexSize = 25; // Good starting size for tray pieces
     this.originalHexSize = this.hexSize; // Store original for later
 
     // Create container - depth will be managed by parent
@@ -51,10 +51,10 @@ export class PieceRenderer {
 
     // Create visual elements
     this.createShadow();
-    this.createGlow();
+    // Glow removed
     this.renderPiece();
 
-    this.depthEffects.registerPiece(this.container, this.shadow, this.glow);
+    this.depthEffects.registerPiece(this.container, this.shadow, null);
   }
 
   /**
@@ -67,14 +67,7 @@ export class PieceRenderer {
     this.container.add(this.shadow);
   }
 
-  /**
-   * Create glow effect (shown when dragging)
-   */
-  private createGlow(): void {
-    this.glow = this.scene.add.graphics();
-    this.glow.setAlpha(0);
-    this.container.add(this.glow);
-  }
+  // Glow effect removed - no longer needed
 
   /**
    * Render the piece hexagons
@@ -194,9 +187,9 @@ export class PieceRenderer {
       // Scale to normal size when dragging
       this.scaleToNormalSize();
 
-      this.depthEffects.beginDragFocus(this.container, this.shadow, this.glow);
+      this.depthEffects.beginDragFocus(this.container, this.shadow, null);
     } else {
-      this.depthEffects.endDragFocus(this.container, this.shadow, this.glow);
+      this.depthEffects.endDragFocus(this.container, this.shadow, null);
     }
   }
 
@@ -219,7 +212,7 @@ export class PieceRenderer {
    */
   setPosition(x: number, y: number): void {
     this.container.setPosition(x, y);
-    this.depthEffects.syncPieceBase(this.container, this.shadow, this.glow);
+    this.depthEffects.syncPieceBase(this.container, this.shadow, null);
   }
 
   /**
@@ -233,48 +226,14 @@ export class PieceRenderer {
    * Highlight valid placement
    */
   showValidPlacement(): void {
-    const theme = this.themeProvider.getTheme();
-    const shape = this.piece.getShape();
-    this.glow.clear();
-    this.glow.lineStyle(4, theme.cellValid, 0.8);
-
-    shape.cells.forEach(coord => {
-      const pos = this.hexToPixel(coord);
-      const bounds = this.calculateBounds();
-      this.drawHexagon(
-        this.glow,
-        pos.x - bounds.centerX,
-        pos.y - bounds.centerY,
-        this.hexSize + 2,
-        false
-      );
-    });
-
-    this.glow.setAlpha(0.8);
+    // Glow removed - no visual feedback for valid placement
   }
 
   /**
    * Highlight invalid placement
    */
   showInvalidPlacement(): void {
-    const theme = this.themeProvider.getTheme();
-    const shape = this.piece.getShape();
-    this.glow.clear();
-    this.glow.lineStyle(4, theme.cellInvalid, 0.8);
-
-    shape.cells.forEach(coord => {
-      const pos = this.hexToPixel(coord);
-      const bounds = this.calculateBounds();
-      this.drawHexagon(
-        this.glow,
-        pos.x - bounds.centerX,
-        pos.y - bounds.centerY,
-        this.hexSize + 2,
-        false
-      );
-    });
-
-    this.glow.setAlpha(0.8);
+    // Glow removed - no visual feedback for invalid placement
   }
 
   /**
@@ -324,7 +283,7 @@ export class PieceRenderer {
       ease: 'Power2'
     });
 
-    this.depthEffects.syncPieceBase(this.container, this.shadow, this.glow);
+    this.depthEffects.syncPieceBase(this.container, this.shadow, null);
   }
 
   /**
@@ -335,7 +294,7 @@ export class PieceRenderer {
     // Ensure container scale reflects the normal size
     const scaleFactor = this.normalHexSize / this.originalHexSize;
     this.container.setScale(scaleFactor);
-    this.depthEffects.syncPieceBase(this.container, this.shadow, this.glow);
+    this.depthEffects.syncPieceBase(this.container, this.shadow, null);
   }
 
   /**
@@ -343,7 +302,7 @@ export class PieceRenderer {
    */
   applyHoverDepth(): void {
     if (this.dragging) return;
-    this.depthEffects.applyPieceHover(this.container, this.shadow, this.glow);
+    this.depthEffects.applyPieceHover(this.container, this.shadow, null);
   }
 
   /**
@@ -351,14 +310,14 @@ export class PieceRenderer {
    */
   releaseHoverDepth(): void {
     if (this.dragging) return;
-    this.depthEffects.releasePieceHover(this.container, this.shadow, this.glow);
+    this.depthEffects.releasePieceHover(this.container, this.shadow, null);
   }
 
   /**
    * Re-sync base metrics for depth effects (used after snapping)
    */
   syncDepthBase(): void {
-    this.depthEffects.syncPieceBase(this.container, this.shadow, this.glow);
+    this.depthEffects.syncPieceBase(this.container, this.shadow, null);
   }
 
   /**

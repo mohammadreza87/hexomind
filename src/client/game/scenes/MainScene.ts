@@ -82,9 +82,9 @@ export class MainScene extends Phaser.Scene {
       this.load.image(RenderConfig.TEXTURE_KEYS.HEX_EMPTY, RenderConfig.ASSETS.HEX_EMPTY);
       this.load.image(RenderConfig.TEXTURE_KEYS.HEX_FILLED, RenderConfig.ASSETS.HEX_FILLED);
       this.load.image(RenderConfig.TEXTURE_KEYS.HEX_PIECE, RenderConfig.ASSETS.HEX_PIECE);
-      // Load SVGs for base (grid) and fill (pieces)
-      this.load.svg(RenderConfig.TEXTURE_KEYS.HEX_BASE_SVG, 'assets/hex-base.svg', { width: 256, height: 256 });
-      this.load.svg(RenderConfig.TEXTURE_KEYS.HEX_FILL_SVG, 'assets/hex-fill.svg', { width: 256, height: 256 });
+      // Load SVGs for base (grid) and fill (pieces) with higher resolution
+      this.load.svg(RenderConfig.TEXTURE_KEYS.HEX_BASE_SVG, 'assets/hex-base.svg', { width: 1024, height: 1024 });
+      this.load.svg(RenderConfig.TEXTURE_KEYS.HEX_FILL_SVG, 'assets/hex-fill.svg', { width: 1024, height: 1024 });
 
       // Show loading progress
       this.load.on('progress', (value: number) => {
@@ -111,16 +111,16 @@ export class MainScene extends Phaser.Scene {
   }
 
   create(): void {
-    // Force pixel-perfect rendering for sharp text
-    this.cameras.main.roundPixels = true;
+    // Don't force pixel rounding - allow smooth rendering
+    this.cameras.main.roundPixels = false;
 
     // Apply canvas styles for optimal high-DPI rendering
     const canvas = this.game.canvas;
     if (canvas) {
-      // Set canvas context for sharp text
+      // Set canvas context for sharp rendering with smoothing
       const context = canvas.getContext('2d');
       if (context) {
-        context.imageSmoothingEnabled = false;
+        context.imageSmoothingEnabled = true;
         context.imageSmoothingQuality = 'high';
       }
     }
@@ -186,7 +186,8 @@ export class MainScene extends Phaser.Scene {
     const theme = this.themeProvider.getTheme();
     const { width, height } = this.cameras.main;
 
-    // Title with neon gradient effect and auto color cycling - no animations
+    // Title removed - HEXOMIND text hidden
+    /*
     const titleText = createGradientText(
       this,
       width / 2,
@@ -197,9 +198,10 @@ export class MainScene extends Phaser.Scene {
       true // Enable auto color cycling
     );
     titleText.setDepth(DS.LAYERS.ui);
-    // No breathing animation, no glow - just static with color changes
+    */
 
-    // Score display with bold Inter font
+    // Score display removed - Score text hidden
+    /*
     this.scoreText = this.add.text(
       width / 2,
       height * 0.12,
@@ -214,8 +216,12 @@ export class MainScene extends Phaser.Scene {
     );
     this.scoreText.setOrigin(0.5, 0.5).setDepth(DS.LAYERS.ui);
     this.scoreText.setResolution(window.devicePixelRatio || 1);
+    */
+    // Create empty text to prevent null reference errors
+    this.scoreText = this.add.text(0, 0, '', {}).setVisible(false);
 
-    // High score display with medium Inter font
+    // High score display removed - Best score text hidden
+    /*
     this.highScoreText = this.add.text(
       width / 2,
       height * 0.16,
@@ -230,6 +236,9 @@ export class MainScene extends Phaser.Scene {
     );
     this.highScoreText.setOrigin(0.5, 0.5).setDepth(DS.LAYERS.ui);
     this.highScoreText.setResolution(window.devicePixelRatio || 1);
+    */
+    // Create empty text to prevent null reference errors
+    this.highScoreText = this.add.text(0, 0, '', {}).setVisible(false);
 
     // Settings button - modern styled button
     this.createSettingsButton(width - DS.SPACING.xl, DS.SPACING.xl);

@@ -1,5 +1,6 @@
 import * as Phaser from 'phaser';
 import { UIComponent } from './components/UIComponent';
+import { highScoreService } from '../../../services/HighScoreService';
 
 interface LeaderboardEntry {
   rank: number;
@@ -540,7 +541,6 @@ export class ModernLeaderboardUI extends UIComponent {
   private async getCurrentUsername(): Promise<string> {
     try {
       // Import dynamically to avoid circular dependencies
-      const { highScoreService } = await import('../../../services/HighScoreService');
       return highScoreService.getUsername();
     } catch (error) {
       console.error('Failed to get username:', error);
@@ -560,8 +560,7 @@ export class ModernLeaderboardUI extends UIComponent {
     } else {
       // Try to get the last known score from HighScoreService
       try {
-        const { highScoreService } = await import('../../../services/HighScoreService');
-        this.currentPlayerScore = await highScoreService.getHighScore();
+          this.currentPlayerScore = await highScoreService.getHighScore();
       } catch (error) {
         console.error('Failed to get player score:', error);
         this.currentPlayerScore = 0;
@@ -692,7 +691,6 @@ export class ModernLeaderboardUI extends UIComponent {
     const palette = this.getPalette();
 
     try {
-      const { highScoreService } = await import('../../../services/HighScoreService');
       const currentUsername = highScoreService.getUsername();
       const currentScore = this.currentPlayerScore || 0;
 

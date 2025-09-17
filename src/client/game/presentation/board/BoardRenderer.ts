@@ -114,23 +114,19 @@ export class BoardRenderer {
    * Calculate optimal hexagon size for viewport
    */
   private calculateOptimalSize(): void {
-    const boardArea = this.viewportManager.getBoardArea();
+    // For 1080x1920 resolution, use fixed optimal sizes
+    const { width, height } = this.scene.cameras.main;
 
     // Calculate size needed for radius-3 grid to fit comfortably
     // Radius 3 = 7 hexagons wide, 7 hexagons tall
     const gridWidth = 7;
     const gridHeight = 7;
 
-    const maxHex = this.viewportManager.getContainerMetric('--game-hex-size-max', 60);
-    const minHex = this.viewportManager.getContainerMetric('--game-hex-size-min', 30);
-    const spacingRatio = this.viewportManager.getContainerMetric('--game-hex-spacing-ratio', 0.08);
-    const scaleAdjust = this.viewportManager.getContainerMetric('--game-hex-scale-factor', 0.95);
-
-    if (boardArea.width <= 0 || boardArea.height <= 0) {
-      this.hexSize = Math.max(minHex * scaleAdjust, minHex);
-      this.hexSpacing = this.hexSize * spacingRatio;
-      return;
-    }
+    // With 1080x1920 resolution, we have more room for larger hexagons
+    const boardArea = {
+      width: width * 0.9,  // Use 90% of width
+      height: height * 0.45  // Use 45% of height for board
+    };
 
     // Calculate hex size based on available space
     // Width: size * sqrt(3) * gridWidth
@@ -138,13 +134,13 @@ export class BoardRenderer {
     const sizeByWidth = boardArea.width / (Math.sqrt(3) * gridWidth);
     const sizeByHeight = boardArea.height / (1.5 * gridHeight);
 
-    // Use the smaller to ensure it fits
-    this.hexSize = Math.min(sizeByWidth, sizeByHeight, maxHex);
-    this.hexSize = Math.max(this.hexSize, minHex);
-    this.hexSize *= scaleAdjust;
+    // Use the smaller to ensure it fits, with good size for 1080p
+    this.hexSize = Math.min(sizeByWidth, sizeByHeight);
+    this.hexSize = Math.max(this.hexSize, 50); // Minimum size for 1080p
+    this.hexSize = Math.min(this.hexSize, 90); // Maximum size for clarity
 
     // Add spacing between cells for better visual clarity
-    this.hexSpacing = this.hexSize * spacingRatio;
+    this.hexSpacing = this.hexSize * 0.08;
   }
 
   /**
@@ -552,7 +548,7 @@ export class BoardRenderer {
 
       // Add outline effect matching piece color
       if (isValid) {
-        // Use piece color for the outline glow
+        // No glow - use subtle outline instead
         this.previewGraphics.lineStyle(3, previewColor, 0.6);
         this.hexRenderer.drawHexagonOutline(
           this.previewGraphics,
@@ -581,7 +577,7 @@ export class BoardRenderer {
         // Get the piece color for line preview (same as piece being placed)
         const linePreviewColor = colorIndex !== undefined
           ? this.themeProvider.getPieceColorByIndex(colorIndex)
-          : this.themeProvider.getTheme().glowSuccess;
+          : 0x10b981; // Success green color without glow
 
         // Track which cells are part of the line to clear
         const lineCells = new Set<string>();

@@ -90,8 +90,9 @@ export class PieceTray {
     this.refreshContainerStyles();
     const metrics = this.getTrayMetrics(width);
 
-    const baseSlotSize = width / 8;
-    this.slotSize = Phaser.Math.Clamp(baseSlotSize, metrics.slotMin, metrics.slotMax);
+    // For 1080x1920, use larger fixed slot size
+    const baseSlotSize = 150; // Fixed size for 1080p
+    this.slotSize = baseSlotSize;
 
     const totalSlotsWidth = this.SLOT_COUNT * this.slotSize;
     const targetAvailableWidth = Math.max(width * metrics.availableWidthRatio, totalSlotsWidth);
@@ -401,7 +402,8 @@ export class PieceTray {
       });
     });
 
-    // Hover effects
+    // Hover effects disabled - no glow
+    /*
     container.on('pointerover', () => {
       if (!renderer.isDragging()) {
         renderer.applyHoverDepth();
@@ -413,6 +415,7 @@ export class PieceTray {
         renderer.releaseHoverDepth();
       }
     });
+    */
   }
 
   /**

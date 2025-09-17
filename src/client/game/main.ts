@@ -21,7 +21,8 @@ const getDevicePixelRatio = (): number => {
     return 2;
   }
 
-  return Math.max(window.devicePixelRatio || 1, 2);
+  // Use actual device pixel ratio for best quality (up to 3 for retina displays)
+  return Math.min(window.devicePixelRatio || 1, 3);
 };
 
 const getViewportSize = (parent?: string): { width: number; height: number } => {
@@ -60,15 +61,11 @@ const buildGameConfig = (
   backgroundColor: '#1a1a1b', // Reddit dark mode default
   resolution,
   scale: {
-    mode: Phaser.Scale.FIT, // Fit to container while maintaining aspect ratio
+    mode: Phaser.Scale.FIT, // Fit the fixed size to container
     autoCenter: Phaser.Scale.CENTER_BOTH,
-    width: dimensions.width,
-    height: dimensions.height,
-    parent,
-    minWidth: MIN_GAME_WIDTH,
-    minHeight: MIN_GAME_HEIGHT,
-    maxWidth: MAX_GAME_WIDTH,
-    maxHeight: MAX_GAME_HEIGHT
+    width: 1080,  // Fixed width for Full HD portrait
+    height: 1920, // Fixed height for Full HD portrait
+    parent
   },
   scene: [MainScene],
   physics: {
@@ -83,7 +80,7 @@ const buildGameConfig = (
     antialias: true,
     antialiasGL: true, // WebGL antialiasing
     pixelArt: false,
-    roundPixels: true, // Snap to pixels for sharper text
+    roundPixels: false, // Don't round pixels - allow smooth positioning
     transparent: false,
     clearBeforeRender: true,
     preserveDrawingBuffer: false,
@@ -96,7 +93,8 @@ const buildGameConfig = (
     failIfMajorPerformanceCaveat: false,
     // WebGL specific for better quality
     autoMobilePipeline: false,
-    multiTexture: true
+    multiTexture: true,
+    mipmapFilter: 'LINEAR' // Enable mipmapping for better quality at different scales
   }
 });
 
@@ -109,9 +107,7 @@ const StartGame = (parent: string) => {
 
   if (typeof window !== 'undefined') {
     const updateSize = () => {
-      const { width: vpWidth, height: vpHeight } = getViewportSize(parent);
-      const nextDimensions = computeResponsiveDimensions(vpWidth, vpHeight);
-      game.scale.resize(nextDimensions.width, nextDimensions.height);
+      // Just refresh the scale, don't resize since we're using fixed dimensions
       game.scale.refresh();
     };
 

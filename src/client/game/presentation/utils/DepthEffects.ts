@@ -104,15 +104,15 @@ export class DepthEffects {
   registerPiece(
     container: Phaser.GameObjects.Container,
     shadow?: Phaser.GameObjects.Graphics,
-    glow?: Phaser.GameObjects.GameObject
+    glow?: Phaser.GameObjects.GameObject | null
   ): void {
-    this.syncPieceBase(container, shadow, glow);
+    this.syncPieceBase(container, shadow, null); // Glow always null
   }
 
   syncPieceBase(
     container: Phaser.GameObjects.Container,
     shadow?: Phaser.GameObjects.Graphics,
-    glow?: Phaser.GameObjects.GameObject
+    glow?: Phaser.GameObjects.GameObject | null
   ): void {
     this.basePositions.set(container, new Phaser.Math.Vector2(container.x, container.y));
     this.baseScales.set(container, new Phaser.Math.Vector2(container.scaleX, container.scaleY));
@@ -121,10 +121,7 @@ export class DepthEffects {
       this.shadowBase.set(shadow, { alpha: shadow.alpha ?? 0 });
     }
 
-    if (glow) {
-      const alpha = (glow as any).alpha ?? 0;
-      this.glowBase.set(glow, { alpha });
-    }
+    // Glow removed - no longer tracking glow state
   }
 
   updatePieceShadow(
@@ -156,7 +153,7 @@ export class DepthEffects {
   applyPieceHover(
     container: Phaser.GameObjects.Container,
     shadow?: Phaser.GameObjects.Graphics,
-    glow?: Phaser.GameObjects.GameObject
+    glow?: Phaser.GameObjects.GameObject | null
   ): void {
     const base = this.basePositions.get(container);
     const scale = this.baseScales.get(container);
@@ -171,9 +168,7 @@ export class DepthEffects {
         shadow.setAlpha(0.18);
         shadow.setVisible(true);
       }
-      if (glow) {
-        (glow as any).alpha = 0.35;
-      }
+      // Glow removed
       return;
     }
 
@@ -198,22 +193,16 @@ export class DepthEffects {
       });
     }
 
-    if (glow) {
-      this.scene.tweens.add({
-        targets: glow,
-        alpha: 0.65,
-        duration: 140,
-        ease: Phaser.Math.Easing.Sine.Out
-      });
-    }
+    // Glow animation removed
 
-    this.applyPipeline(container, 0.55);
+    // Pipeline disabled - no glow effects
+    // this.applyPipeline(container, 0.55);
   }
 
   releasePieceHover(
     container: Phaser.GameObjects.Container,
     shadow?: Phaser.GameObjects.Graphics,
-    glow?: Phaser.GameObjects.GameObject
+    glow?: Phaser.GameObjects.GameObject | null
   ): void {
     const base = this.basePositions.get(container);
     const scale = this.baseScales.get(container);
@@ -223,15 +212,13 @@ export class DepthEffects {
     }
 
     const shadowState = shadow ? this.shadowBase.get(shadow) : undefined;
-    const glowState = glow ? this.glowBase.get(glow) : undefined;
+    // Glow state removed
 
     if (this.prefersReducedMotion) {
       if (shadow && shadowState) {
         shadow.setAlpha(shadowState.alpha);
       }
-      if (glow && glowState) {
-        (glow as any).alpha = glowState.alpha;
-      }
+      // Glow removed
       return;
     }
 
@@ -262,34 +249,27 @@ export class DepthEffects {
       });
     }
 
-    this.removePipeline(container);
+    // Pipeline disabled
+    // this.removePipeline(container);
   }
 
   beginDragFocus(
     container: Phaser.GameObjects.Container,
     shadow?: Phaser.GameObjects.Graphics,
-    glow?: Phaser.GameObjects.GameObject
+    glow?: Phaser.GameObjects.GameObject | null
   ): void {
     if (this.prefersReducedMotion) {
-      if (glow) {
-        (glow as any).alpha = 0.4;
-      }
+      // Glow removed
       if (shadow) {
         shadow.setAlpha(0.12);
       }
       return;
     }
 
-    this.applyPipeline(container, 0.75);
+    // Pipeline disabled - no glow effects
+    // this.applyPipeline(container, 0.75);
 
-    if (glow) {
-      this.scene.tweens.add({
-        targets: glow,
-        alpha: 0.8,
-        duration: 120,
-        ease: Phaser.Math.Easing.Sine.Out
-      });
-    }
+    // Glow animation removed
 
     if (shadow) {
       this.scene.tweens.add({
@@ -304,22 +284,21 @@ export class DepthEffects {
   endDragFocus(
     container: Phaser.GameObjects.Container,
     shadow?: Phaser.GameObjects.Graphics,
-    glow?: Phaser.GameObjects.GameObject
+    glow?: Phaser.GameObjects.GameObject | null
   ): void {
     const shadowState = shadow ? this.shadowBase.get(shadow) : undefined;
-    const glowState = glow ? this.glowBase.get(glow) : undefined;
+    // Glow state removed
 
     if (this.prefersReducedMotion) {
       if (shadow && shadowState) {
         shadow.setAlpha(shadowState.alpha);
       }
-      if (glow && glowState) {
-        (glow as any).alpha = glowState.alpha;
-      }
+      // Glow removed
       return;
     }
 
-    this.removePipeline(container);
+    // Pipeline disabled
+    // this.removePipeline(container);
 
     if (shadow && shadowState) {
       this.scene.tweens.add({
@@ -330,14 +309,7 @@ export class DepthEffects {
       });
     }
 
-    if (glow && glowState) {
-      this.scene.tweens.add({
-        targets: glow,
-        alpha: glowState.alpha,
-        duration: 160,
-        ease: Phaser.Math.Easing.Sine.Out
-      });
-    }
+    // Glow animation removed
   }
 
   celebrateCellFill(image: Phaser.GameObjects.Image, tint: number): void {
@@ -346,7 +318,8 @@ export class DepthEffects {
     }
 
     this.pushDepth(image, 90);
-    this.applyPipeline(image, 0.4, tint);
+    // Pipeline disabled - no glow effects
+    // this.applyPipeline(image, 0.4, tint);
 
     this.scene.tweens.add({
       targets: image,
@@ -366,13 +339,15 @@ export class DepthEffects {
     }
 
     this.pushDepth(image, 200);
-    this.applyPipeline(image, 0.65, tint);
+    // Pipeline disabled - no glow effects
+    // this.applyPipeline(image, 0.65, tint);
     const { x, y } = this.getWorldPosition(image);
     this.spawnParticleBurst(x, y, tint);
   }
 
   cleanupGameObject(gameObject: Phaser.GameObjects.GameObject): void {
-    this.removePipeline(gameObject);
+    // Pipeline disabled
+    // this.removePipeline(gameObject);
     this.popDepth(gameObject);
   }
 
