@@ -926,6 +926,7 @@ export class MainScene extends Phaser.Scene {
    * Load high score from Reddit KV or local storage
    */
   private async loadHighScore(): Promise<void> {
+    await highScoreService.awaitReady();
     let bestScore = 0;
 
     try {
