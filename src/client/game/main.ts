@@ -1,33 +1,17 @@
 import * as Phaser from 'phaser';
 import { MainScene } from './scenes/MainScene';
-import {
-  calculateResponsiveDimensions as computeResponsiveDimensions,
-  FALLBACK_VIEWPORT_HEIGHT,
-  FALLBACK_VIEWPORT_WIDTH,
-  MAX_GAME_HEIGHT,
-  MAX_GAME_WIDTH,
-  MIN_GAME_HEIGHT,
-  MIN_GAME_WIDTH,
-  ResponsiveDimensions
-} from './responsive';
+import { measureResponsiveViewport, ResponsiveMetrics, getDevicePixelRatio } from './responsive';
 
 /**
  * Hexomind Game Configuration
  * Optimized for Reddit Devvit with high-DPI support
  */
 
-const getDevicePixelRatio = (): number => {
-  if (typeof window === 'undefined') {
-    return 2;
-  }
-
-  // Use actual device pixel ratio for best quality (up to 3 for retina displays)
-  return Math.min(window.devicePixelRatio || 1, 3);
-};
+const FALLBACK_VIEWPORT = { width: 1080, height: 1920 };
 
 const getViewportSize = (parent?: string): { width: number; height: number } => {
   if (typeof window === 'undefined') {
-    return { width: FALLBACK_VIEWPORT_WIDTH, height: FALLBACK_VIEWPORT_HEIGHT };
+    return FALLBACK_VIEWPORT;
   }
 
   if (typeof document !== 'undefined' && parent) {
@@ -46,14 +30,14 @@ const getViewportSize = (parent?: string): { width: number; height: number } => 
   }
 
   return {
-    width: window.innerWidth || FALLBACK_VIEWPORT_WIDTH,
-    height: window.innerHeight || FALLBACK_VIEWPORT_HEIGHT
+    width: window.innerWidth || FALLBACK_VIEWPORT.width,
+    height: window.innerHeight || FALLBACK_VIEWPORT.height
   };
 };
 
 const buildGameConfig = (
   parent: string,
-  dimensions: ResponsiveDimensions,
+  metrics: ResponsiveMetrics,
   resolution: number
 ): Phaser.Types.Core.GameConfig => ({
   type: Phaser.WEBGL, // Force WebGL for better performance
@@ -63,9 +47,17 @@ const buildGameConfig = (
   scale: {
     mode: Phaser.Scale.FIT, // Fit the fixed size to container
     autoCenter: Phaser.Scale.CENTER_BOTH,
-    width: 1080,  // Fixed width for Full HD portrait
-    height: 1920, // Fixed height for Full HD portrait
-    parent
+    width: metrics.width,
+    height: metrics.height,
+    parent,
+    min: {
+      width: 540,
+      height: 960
+    },
+    max: {
+      width: 2560,
+      height: 2560
+    }
   },
   scene: [MainScene],
   physics: {
@@ -98,22 +90,71 @@ const buildGameConfig = (
   }
 });
 
+const resolveContainerElement = (parent?: string): HTMLElement | null => {
+  if (typeof document === 'undefined') {
+    return null;
+  }
+
+  if (parent) {
+    const explicit = document.getElementById(parent);
+    if (explicit) {
+      return explicit;
+    }
+
+    const selector = document.querySelector<HTMLElement>(`#${parent}`);
+    if (selector) {
+      return selector;
+    }
+  }
+
+  return null;
+};
+
+const applyContainerMetrics = (element: HTMLElement | null, metrics: ResponsiveMetrics) => {
+  if (!element) {
+    return;
+  }
+
+  element.dataset.orientation = metrics.orientation;
+  element.style.setProperty('--game-aspect', metrics.aspectRatio.toString());
+  element.style.setProperty('--game-display-width', `${metrics.displayWidth}px`);
+  element.style.setProperty('--game-display-height', `${metrics.displayHeight}px`);
+};
+
 const StartGame = (parent: string) => {
   const viewport = getViewportSize(parent);
-  const dimensions = computeResponsiveDimensions(viewport.width, viewport.height);
-  const config = buildGameConfig(parent, dimensions, getDevicePixelRatio());
+  let metrics = measureResponsiveViewport(viewport.width, viewport.height);
+  const config = buildGameConfig(parent, metrics, getDevicePixelRatio());
 
   const game = new Phaser.Game(config);
+  const containerElement = resolveContainerElement(parent);
+
+  const publishMetrics = (next: ResponsiveMetrics) => {
+    game.registry.set('responsive:metrics', next);
+    game.events.emit('responsive:metrics', next);
+  };
+
+  applyContainerMetrics(containerElement, metrics);
+  publishMetrics(metrics);
 
   if (typeof window !== 'undefined') {
     const updateSize = () => {
-      // Just refresh the scale, don't resize since we're using fixed dimensions
-      game.scale.refresh();
+      const latest = getViewportSize(parent);
+      metrics = measureResponsiveViewport(latest.width, latest.height);
+      applyContainerMetrics(containerElement, metrics);
+      game.scale.resize(metrics.width, metrics.height);
+      publishMetrics(metrics);
     };
 
-    window.addEventListener('resize', updateSize);
+    window.addEventListener('resize', updateSize, { passive: true });
     const visualViewport = window.visualViewport;
     visualViewport?.addEventListener('resize', updateSize);
+
+    const orientationHandler = () => {
+      window.setTimeout(updateSize, 100);
+    };
+
+    window.addEventListener('orientationchange', orientationHandler);
 
     game.scale.on(Phaser.Scale.Events.ORIENTATION_CHANGE, updateSize);
 
@@ -121,6 +162,7 @@ const StartGame = (parent: string) => {
       window.removeEventListener('resize', updateSize);
       visualViewport?.removeEventListener('resize', updateSize);
       game.scale.off(Phaser.Scale.Events.ORIENTATION_CHANGE, updateSize);
+      window.removeEventListener('orientationchange', orientationHandler);
     });
   }
 
@@ -128,4 +170,3 @@ const StartGame = (parent: string) => {
 };
 
 export default StartGame;
-export { computeResponsiveDimensions as calculateResponsiveDimensions };

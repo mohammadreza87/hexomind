@@ -20,6 +20,7 @@ import { SharpText } from '../utils/SharpText';
 import { DS } from '../config/DesignSystem';
 import { createGradientText } from '../presentation/ui/GradientText';
 import { GameStateManager } from '../services/GameStateManager';
+import { ResponsiveMetrics, measureResponsiveViewport } from '../responsive';
 // Asset URLs (bundled by Vite) - commented out for now since SVG not available
 // import hexSvgUrl from '../../assets/images/hex.svg';
 
@@ -44,6 +45,7 @@ export class MainScene extends Phaser.Scene {
   private modernLeaderboardUI!: ModernLeaderboardUI;
   private gameOverUI!: GameOverUI;
   private toast!: ToastUI;
+  private responsiveMetrics!: ResponsiveMetrics;
 
   // Game State
   private score: number = 0;
@@ -132,8 +134,12 @@ export class MainScene extends Phaser.Scene {
     const theme = this.themeProvider.getPhaserTheme();
     this.cameras.main.setBackgroundColor(theme.backgroundColor);
 
+    // Resolve initial responsive metrics
+    this.responsiveMetrics = (this.registry.get('responsive:metrics') as ResponsiveMetrics | undefined)
+      ?? measureResponsiveViewport(this.scale.gameSize.width, this.scale.gameSize.height);
+
     // Create the board
-    this.boardRenderer = new BoardRenderer(this);
+    this.boardRenderer = new BoardRenderer(this, this.responsiveMetrics);
 
     // Initialize services
     this.pieceGenerator = new PieceGenerationService({
@@ -145,7 +151,7 @@ export class MainScene extends Phaser.Scene {
     this.gameOverService = new GameOverService(this.placementValidator);
 
     // Create piece tray
-    this.pieceTray = new PieceTray(this, this.themeProvider);
+    this.pieceTray = new PieceTray(this, this.themeProvider, this.responsiveMetrics);
 
     // Create UI
     this.createUI();
@@ -176,6 +182,36 @@ export class MainScene extends Phaser.Scene {
     } else {
       // Start a new game if no save exists
       this.startNewGame();
+    }
+
+    this.game.events.on('responsive:metrics', this.handleResponsiveMetrics, this);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.game.events.off('responsive:metrics', this.handleResponsiveMetrics, this);
+    });
+
+    this.layoutUIForViewport(this.responsiveMetrics);
+  }
+
+  private handleResponsiveMetrics(metrics: ResponsiveMetrics): void {
+    this.responsiveMetrics = metrics;
+    this.boardRenderer.updateViewport(metrics);
+    this.pieceTray.updateLayout(metrics);
+    this.layoutUIForViewport(metrics);
+  }
+
+  private layoutUIForViewport(metrics: ResponsiveMetrics): void {
+    const { width, height } = metrics;
+    const camera = this.cameras.main;
+
+    camera.setSize(width, height);
+
+    if (this.scoreText && this.highScoreText) {
+      this.scoreText.setPosition(width / 2, DS.SPACING.xl);
+      this.highScoreText.setPosition(width / 2, this.scoreText.y + this.scoreText.height + DS.SPACING.sm);
+    }
+
+    if (this.settingsButton) {
+      this.settingsButton.setPosition(width - DS.SPACING.xl, DS.SPACING.xl);
     }
   }
 

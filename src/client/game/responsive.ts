@@ -1,133 +1,154 @@
-import { ScreenConfig, getOptimalDimensions, calculateScaleFactor } from './config/ScreenConfig';
-
-// Use optimal game dimensions from ScreenConfig
-export const GAME_ASPECT_RATIO = ScreenConfig.GAME_OPTIMAL.mobile.aspectRatio; // 390/844 = 0.462
-
-// Set reasonable min/max for mobile-first approach
-export const MIN_GAME_WIDTH = ScreenConfig.DEVVIT.safe_width;  // 320
-export const MAX_GAME_WIDTH = ScreenConfig.BREAKPOINTS.tablet; // 768
-
-// Calculate heights based on mobile portrait aspect ratio (height should be ~2.16x width)
-export const MIN_GAME_HEIGHT = Math.round(MIN_GAME_WIDTH / GAME_ASPECT_RATIO); // ~693
-export const MAX_GAME_HEIGHT = Math.round(MAX_GAME_WIDTH / GAME_ASPECT_RATIO); // ~1663
-
-// Fallback dimensions (Devvit optimized)
-export const FALLBACK_VIEWPORT_WIDTH = ScreenConfig.GAME_OPTIMAL.devvit.width;  // 360
-export const FALLBACK_VIEWPORT_HEIGHT = ScreenConfig.GAME_OPTIMAL.devvit.height; // 640
 
 export type Orientation = 'portrait' | 'landscape';
 
-export interface ResponsiveDimensions {
+export interface ResponsiveRect {
+  x: number;
+  y: number;
   width: number;
   height: number;
-  scale: number;
-  orientation: Orientation;
-  platform: 'mobile' | 'tablet' | 'desktop' | 'devvit';
+  top: number;
+  right: number;
+  bottom: number;
+  centerX: number;
+  centerY: number;
 }
 
-/**
- * Calculate responsive dimensions based on viewport
- * Optimized for mobile-first with Devvit support
- */
-export const calculateResponsiveDimensions = (
-  viewportWidth: number,
-  viewportHeight: number
-): ResponsiveDimensions => {
-  const safeWidth = Math.max(1, viewportWidth);
-  const safeHeight = Math.max(1, viewportHeight);
-  const orientation: Orientation = safeWidth >= safeHeight ? 'landscape' : 'portrait';
+export interface ResponsiveMetrics {
+  width: number;
+  height: number;
+  orientation: Orientation;
+  aspectRatio: number;
+  scale: number;
+  displayWidth: number;
+  displayHeight: number;
+  offsetX: number;
+  offsetY: number;
+  safeArea: ResponsiveRect;
+  boardArea: ResponsiveRect;
+  trayArea: ResponsiveRect;
+}
 
-  // Get optimal dimensions for this viewport
-  const optimal = getOptimalDimensions(safeWidth, safeHeight);
+interface OrientationConfig {
+  width: number;
+  height: number;
+  safe: { top: number; bottom: number; sides: number };
+  boardRatio: number;
+  trayRatio: number;
+}
 
-  // Determine platform
-  let platform: ResponsiveDimensions['platform'] = 'mobile';
-  if (safeWidth >= ScreenConfig.BREAKPOINTS.desktop) {
-    platform = 'desktop';
-  } else if (safeWidth >= ScreenConfig.BREAKPOINTS.tablet) {
-    platform = 'tablet';
-  } else if (safeWidth <= ScreenConfig.DEVVIT.max_width && safeHeight <= ScreenConfig.DEVVIT.max_height) {
-    platform = 'devvit';
+const MIN_VIEWPORT_WIDTH = 320;
+const MIN_VIEWPORT_HEIGHT = 480;
+const MAX_VIEWPORT_WIDTH = 3840;
+const MAX_VIEWPORT_HEIGHT = 3840;
+
+const PORTRAIT_CONFIG: OrientationConfig = {
+  width: 1080,
+  height: 1920,
+  safe: { top: 0.08, bottom: 0.18, sides: 0.06 },
+  boardRatio: 0.64,
+  trayRatio: 0.28
+};
+
+const LANDSCAPE_CONFIG: OrientationConfig = {
+  width: 1920,
+  height: 1080,
+  safe: { top: 0.06, bottom: 0.12, sides: 0.08 },
+  boardRatio: 0.7,
+  trayRatio: 0.22
+};
+
+const clamp = (value: number, min: number, max: number): number => {
+  return Math.max(min, Math.min(max, value));
+};
+
+const createRect = (x: number, y: number, width: number, height: number): ResponsiveRect => ({
+  x,
+  y,
+  width,
+  height,
+  top: y,
+  right: x + width,
+  bottom: y + height,
+  centerX: x + width / 2,
+  centerY: y + height / 2
+});
+
+const pickConfig = (viewWidth: number, viewHeight: number): { orientation: Orientation; config: OrientationConfig } => {
+  if (viewWidth >= viewHeight) {
+    return { orientation: 'landscape', config: LANDSCAPE_CONFIG };
+  }
+  return { orientation: 'portrait', config: PORTRAIT_CONFIG };
+};
+
+const resolveScale = (viewWidth: number, viewHeight: number, config: OrientationConfig): { scale: number; displayWidth: number; displayHeight: number; offsetX: number; offsetY: number } => {
+  const safeWidth = clamp(viewWidth, MIN_VIEWPORT_WIDTH, MAX_VIEWPORT_WIDTH);
+  const safeHeight = clamp(viewHeight, MIN_VIEWPORT_HEIGHT, MAX_VIEWPORT_HEIGHT);
+
+  const aspect = config.width / config.height;
+  let displayWidth = safeWidth;
+  let displayHeight = Math.round(displayWidth / aspect);
+
+  if (displayHeight > safeHeight) {
+    displayHeight = safeHeight;
+    displayWidth = Math.round(displayHeight * aspect);
   }
 
-  let gameWidth: number;
-  let gameHeight: number;
+  const scale = displayWidth / config.width;
+  const offsetX = Math.floor((safeWidth - displayWidth) / 2);
+  const offsetY = Math.floor((safeHeight - displayHeight) / 2);
 
-  if (orientation === 'portrait') {
-    // Portrait mode - prioritize height
-    gameWidth = Math.min(safeWidth, optimal.width);
-    gameHeight = Math.round(gameWidth / optimal.aspectRatio);
+  return { scale, displayWidth, displayHeight, offsetX, offsetY };
+};
 
-    // If height exceeds viewport, scale down
-    if (gameHeight > safeHeight) {
-      gameHeight = safeHeight;
-      gameWidth = Math.round(gameHeight * optimal.aspectRatio);
-    }
+const buildLayout = (config: OrientationConfig): { safeArea: ResponsiveRect; boardArea: ResponsiveRect; trayArea: ResponsiveRect } => {
+  const safeWidth = config.width * (1 - config.safe.sides * 2);
+  const safeHeight = config.height * (1 - config.safe.top - config.safe.bottom);
+  const safeArea = createRect(
+    config.width * config.safe.sides,
+    config.height * config.safe.top,
+    safeWidth,
+    safeHeight
+  );
 
-    // Apply min/max constraints
-    gameWidth = Math.max(MIN_GAME_WIDTH, Math.min(MAX_GAME_WIDTH, gameWidth));
-    gameHeight = Math.max(MIN_GAME_HEIGHT, Math.min(MAX_GAME_HEIGHT, gameHeight));
-  } else {
-    // Landscape mode - flip the dimensions
-    gameHeight = Math.min(safeHeight, optimal.width); // Use portrait width as landscape height
-    gameWidth = Math.round(gameHeight / optimal.aspectRatio);
+  const boardHeight = safeArea.height * config.boardRatio;
+  const trayHeight = safeArea.height * config.trayRatio;
 
-    // If width exceeds viewport, scale down
-    if (gameWidth > safeWidth) {
-      gameWidth = safeWidth;
-      gameHeight = Math.round(gameWidth * optimal.aspectRatio);
-    }
+  const boardArea = createRect(safeArea.x, safeArea.y, safeArea.width, boardHeight);
+  const trayArea = createRect(
+    safeArea.x,
+    safeArea.bottom - trayHeight,
+    safeArea.width,
+    trayHeight
+  );
 
-    // Apply constraints (swapped for landscape)
-    gameHeight = Math.max(MIN_GAME_WIDTH, Math.min(MAX_GAME_WIDTH, gameHeight));
-    gameWidth = Math.max(MIN_GAME_HEIGHT, Math.min(MAX_GAME_HEIGHT, gameWidth));
-  }
+  return { safeArea, boardArea, trayArea };
+};
 
-  // Calculate scale factor for UI scaling
-  const scale = calculateScaleFactor(gameWidth, gameHeight, safeWidth, safeHeight);
-
-  // Final dimensions
-  const finalWidth = Math.round(gameWidth);
-  const finalHeight = Math.round(gameHeight);
+export const measureResponsiveViewport = (viewWidth: number, viewHeight: number): ResponsiveMetrics => {
+  const { orientation, config } = pickConfig(viewWidth, viewHeight);
+  const { scale, displayWidth, displayHeight, offsetX, offsetY } = resolveScale(viewWidth, viewHeight, config);
+  const { safeArea, boardArea, trayArea } = buildLayout(config);
 
   return {
-    width: finalWidth,
-    height: finalHeight,
-    scale,
+    width: config.width,
+    height: config.height,
     orientation,
-    platform
+    aspectRatio: config.width / config.height,
+    scale,
+    displayWidth,
+    displayHeight,
+    offsetX,
+    offsetY,
+    safeArea,
+    boardArea,
+    trayArea
   };
 };
 
-/**
- * Get hex size based on game dimensions and grid size
- */
-export function getResponsiveHexSize(
-  gameWidth: number,
-  gameHeight: number,
-  gridCols: number,
-  gridRows: number
-): number {
-  // Calculate hex size to fit the game area
-  // Account for hex spacing and margins
-  const marginPercent = 0.1; // 10% margin on each side
-  const spacingFactor = 1.1; // 10% spacing between hexes
+export const getDevicePixelRatio = (): number => {
+  if (typeof window === 'undefined') {
+    return 2;
+  }
 
-  const availableWidth = gameWidth * (1 - marginPercent * 2);
-  const availableHeight = gameHeight * (1 - marginPercent * 2);
-
-  // Hexagon width calculation (flat-top orientation)
-  const hexWidthFromCols = availableWidth / (gridCols * spacingFactor);
-
-  // Hexagon height calculation
-  const hexHeightFromRows = availableHeight / (gridRows * 0.75 * spacingFactor); // 0.75 for hex overlap
-
-  // Use the smaller to ensure everything fits
-  const hexSize = Math.min(hexWidthFromCols, hexHeightFromRows) / 2;
-
-  // Apply min/max constraints
-  const minHexSize = 15; // Minimum playable size
-  const maxHexSize = 50; // Maximum for visual clarity
-
-  return Math.max(minHexSize, Math.min(maxHexSize, hexSize));
-}
+  return Math.min(window.devicePixelRatio || 1, 3);
+};
