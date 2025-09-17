@@ -40,11 +40,11 @@ export async function setUserHighScore(username: string, score: number): Promise
       await redis.set(key, score.toString());
 
       // Also update the leaderboard
-      await redis.zadd('leaderboard:global', { score, member: username });
+      await redis.zAdd('leaderboard:global', { score, member: username });
 
       // Store metadata
       const metaKey = `highscore:meta:${username}`;
-      await redis.hset(metaKey, {
+      await redis.hSet(metaKey, {
         score: score.toString(),
         timestamp: Date.now().toString(),
         postId: context.postId || '',
@@ -67,7 +67,7 @@ export async function setUserHighScore(username: string, score: number): Promise
 export async function getDailyLeaderboard(date: string, limit: number = 10): Promise<LeaderboardEntry[]> {
   try {
     const key = `leaderboard:daily:${date}`;
-    const scores = await redis.zrange(key, 0, limit - 1, {
+    const scores = await redis.zRange(key, 0, limit - 1, {
       reverse: true,
       withScores: true
     });
@@ -116,7 +116,7 @@ export async function updateDailyLeaderboard(username: string, score: number): P
         : null;
 
     if (parsedScore === null || Number.isNaN(parsedScore) || score > parsedScore) {
-      await redis.zadd(key, { score, member: username });
+      await redis.zAdd(key, { score, member: username });
     }
 
     // Set expiry for daily leaderboard (7 days)
@@ -145,7 +145,7 @@ export async function getWeeklyLeaderboard(limit: number = 10): Promise<Leaderbo
   try {
     const { week, year } = getWeekInfo();
     const key = `leaderboard:weekly:${year}:${week}`;
-    const scores = await redis.zrange(key, 0, limit - 1, {
+    const scores = await redis.zRange(key, 0, limit - 1, {
       reverse: true,
       withScores: true
     });
@@ -194,7 +194,7 @@ export async function updateWeeklyLeaderboard(username: string, score: number): 
         : null;
 
     if (parsedScore === null || Number.isNaN(parsedScore) || score > parsedScore) {
-      await redis.zadd(key, { score, member: username });
+      await redis.zAdd(key, { score, member: username });
     }
 
     // Set expiry for weekly leaderboard (30 days)
@@ -212,7 +212,7 @@ export async function getGlobalLeaderboard(limit: number = 10): Promise<Leaderbo
     console.log(`Getting global leaderboard, limit: ${limit}`);
 
     // Get top scores from sorted set
-    const scores = await redis.zrange('leaderboard:global', 0, limit - 1, {
+    const scores = await redis.zRange('leaderboard:global', 0, limit - 1, {
       reverse: true,
       withScores: true
     });
@@ -234,7 +234,7 @@ export async function getGlobalLeaderboard(limit: number = 10): Promise<Leaderbo
 
       // Get metadata
       const metaKey = `highscore:meta:${username}`;
-      const metadata = await redis.hgetall(metaKey);
+      const metadata = await redis.hGetAll(metaKey);
 
       entries.push({
         rank,
@@ -260,7 +260,7 @@ export async function getGlobalLeaderboard(limit: number = 10): Promise<Leaderbo
 export async function getSubredditLeaderboard(subreddit: string, limit: number = 10): Promise<LeaderboardEntry[]> {
   try {
     const key = `leaderboard:subreddit:${subreddit}`;
-    const scores = await redis.zrange(key, 0, limit - 1, {
+    const scores = await redis.zRange(key, 0, limit - 1, {
       reverse: true,
       withScores: true
     });
@@ -277,7 +277,7 @@ export async function getSubredditLeaderboard(subreddit: string, limit: number =
       const score = parseInt(scores[i + 1] as string);
 
       const metaKey = `highscore:meta:${username}:${subreddit}`;
-      const metadata = await redis.hgetall(metaKey);
+      const metadata = await redis.hGetAll(metaKey);
 
       entries.push({
         rank,
@@ -303,11 +303,11 @@ export async function getSubredditLeaderboard(subreddit: string, limit: number =
 export async function updateSubredditLeaderboard(username: string, score: number, subreddit: string): Promise<void> {
   try {
     const key = `leaderboard:subreddit:${subreddit}`;
-    await redis.zadd(key, { score, member: username });
+    await redis.zAdd(key, { score, member: username });
 
     // Store subreddit-specific metadata
     const metaKey = `highscore:meta:${username}:${subreddit}`;
-    await redis.hset(metaKey, {
+    await redis.hSet(metaKey, {
       score: score.toString(),
       timestamp: Date.now().toString(),
       postId: context.postId || '',
@@ -323,7 +323,7 @@ export async function updateSubredditLeaderboard(username: string, score: number
  */
 export async function getUserRank(username: string): Promise<number | null> {
   try {
-    const rank = await redis.zrevrank('leaderboard:global', username);
+    const rank = await redis.zRevRank('leaderboard:global', username);
     return rank !== null ? rank + 1 : null; // Convert 0-based to 1-based
   } catch (error) {
     console.error('Error getting user rank:', error);
@@ -346,7 +346,7 @@ export async function getGameStatistics(): Promise<{
     const totalGames = parseInt(await redis.get(totalGamesKey) || '0');
 
     // Get top score
-    const topScores = await redis.zrange('leaderboard:global', 0, 0, {
+    const topScores = await redis.zRange('leaderboard:global', 0, 0, {
       reverse: true,
       withScores: true
     });

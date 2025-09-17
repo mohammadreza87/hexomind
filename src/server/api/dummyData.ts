@@ -66,11 +66,11 @@ export async function populateAllTimeLeaderboard(count: number = 100): Promise<v
       const score = generateScore(i, 50000);
 
       // Add to global leaderboard
-      await redis.zadd(leaderboardKey, { score, member: username });
+      await redis.zAdd(leaderboardKey, { score, member: username });
 
       // Add metadata
       const metaKey = `highscore:meta:${username}`;
-      await redis.hset(metaKey, {
+      await redis.hSet(metaKey, {
         score: score.toString(),
         timestamp: (Date.now() - Math.floor(Math.random() * 30 * 24 * 60 * 60 * 1000)).toString(), // Random time in last 30 days
         postId: 'dummy',
@@ -112,7 +112,7 @@ export async function populateDailyLeaderboard(count: number = 15): Promise<void
       const score = generateScore(i, 30000);
 
       // Add to daily leaderboard
-      await redis.zadd(leaderboardKey, { score, member: username });
+      await redis.zAdd(leaderboardKey, { score, member: username });
     }
 
     // Set expiry for daily leaderboard (7 days)
@@ -155,7 +155,7 @@ export async function populateWeeklyLeaderboard(count: number = 35): Promise<voi
       const score = generateScore(i, 40000);
 
       // Add to weekly leaderboard
-      await redis.zadd(leaderboardKey, { score, member: username });
+      await redis.zAdd(leaderboardKey, { score, member: username });
     }
 
     // Set expiry for weekly leaderboard (30 days)
@@ -227,7 +227,7 @@ export async function ensurePlayerInLeaderboard(username: string, score: number)
           : null;
 
       if (parsedScore === null || Number.isNaN(parsedScore) || score > parsedScore) {
-        await redis.zadd(key, { score, member: username });
+        await redis.zAdd(key, { score, member: username });
       }
 
       if (expirySeconds) {
