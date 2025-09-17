@@ -126,10 +126,13 @@ export class HighScoreService {
 
         if (data.username) {
           this.redditUsername = data.username;
+          resolvedUsername = data.username;
+
           if (!this.customUsername) {
             this.username = this.redditUsername;
             localStorage.setItem('hexomind_username', this.username);
             console.log('Using Reddit username:', this.redditUsername);
+          }
         }
       }
     } catch (error) {
@@ -270,9 +273,16 @@ export class HighScoreService {
       }));
       localStorage.setItem('hexomind_username', username);
 
-    // Save to localStorage
+      return {
+        success: true,
+        offlineFallback: true,
+        message: 'Username saved locally'
+      };
+    }
+
+    // Save to localStorage before attempting server persistence
     localStorage.setItem('hexomind_custom_username', JSON.stringify({
-      username: username,
+      username,
       timestamp: Date.now()
     }));
     localStorage.setItem('hexomind_username', username);

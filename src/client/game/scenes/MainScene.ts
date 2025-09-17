@@ -20,6 +20,7 @@ import { SharpText } from '../utils/SharpText';
 import { DS } from '../config/DesignSystem';
 import { createGradientText } from '../presentation/ui/GradientText';
 import { GameStateManager } from '../services/GameStateManager';
+import { GameLayoutManager } from '../layout/GameLayoutManager';
 // Asset URLs (bundled by Vite) - commented out for now since SVG not available
 // import hexSvgUrl from '../../assets/images/hex.svg';
 
@@ -57,6 +58,7 @@ export class MainScene extends Phaser.Scene {
   // Debounce game-over checks and avoid racing with tray spawn
   private gameOverCheckTimer: Phaser.Time.TimerEvent | null = null;
   private isSpawningSet: boolean = false;
+  private layout!: GameLayoutManager;
 
   constructor() {
     super({ key: 'MainScene' });
@@ -125,6 +127,8 @@ export class MainScene extends Phaser.Scene {
       }
     }
 
+    this.layout = new GameLayoutManager(this);
+
     // Initialize theme provider
     this.themeProvider = new NeonThemeProvider();
 
@@ -133,7 +137,7 @@ export class MainScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor(theme.backgroundColor);
 
     // Create the board
-    this.boardRenderer = new BoardRenderer(this);
+    this.boardRenderer = new BoardRenderer(this, this.layout);
 
     // Initialize services
     this.pieceGenerator = new PieceGenerationService({
@@ -145,7 +149,7 @@ export class MainScene extends Phaser.Scene {
     this.gameOverService = new GameOverService(this.placementValidator);
 
     // Create piece tray
-    this.pieceTray = new PieceTray(this, this.themeProvider);
+    this.pieceTray = new PieceTray(this, this.themeProvider, this.layout);
 
     // Create UI
     this.createUI();

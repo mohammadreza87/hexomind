@@ -30,7 +30,14 @@ export function hexToKey(hex: HexCoordinates): string {
  * Parse a string key back to hex coordinates
  */
 export function keyToHex(key: string): HexCoordinates {
-  const [q, r] = key.split(',').map(Number);
+  const [qRaw, rRaw] = key.split(',');
+  const q = Number.parseInt(qRaw ?? '', 10);
+  const r = Number.parseInt(rRaw ?? '', 10);
+
+  if (!Number.isFinite(q) || !Number.isFinite(r)) {
+    throw new Error(`Invalid hex key: ${key}`);
+  }
+
   return { q, r };
 }
 
@@ -65,6 +72,11 @@ export const HEX_DIRECTIONS: HexCoordinates[] = [
  */
 export function hexNeighbor(hex: HexCoordinates, direction: number): HexCoordinates {
   const dir = HEX_DIRECTIONS[direction];
+
+  if (!dir) {
+    throw new RangeError(`Invalid hex direction: ${direction}`);
+  }
+
   return { q: hex.q + dir.q, r: hex.r + dir.r };
 }
 

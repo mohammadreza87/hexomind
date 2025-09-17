@@ -2,7 +2,7 @@ import * as Phaser from 'phaser';
 import { GridModel } from '../../core/models/GridModel';
 import { HexCoordinates, hexToKey } from '../../../../shared/types/hex';
 import { NeonThemeProvider } from '../theme/NeonThemeProvider';
-import { ViewportManager } from './ViewportManager';
+import { GameLayoutManager, LayoutMetrics } from '../../layout/GameLayoutManager';
 import { HexagonRenderer } from './HexagonRenderer';
 import { RenderConfig } from '../../config/RenderConfig';
 import { DepthEffects } from '../utils/DepthEffects';
@@ -21,7 +21,9 @@ export class BoardRenderer {
   private scene: Phaser.Scene;
   private gridModel: GridModel;
   private themeProvider: NeonThemeProvider;
-  private viewportManager: ViewportManager;
+  private layout: GameLayoutManager;
+  private layoutMetrics: LayoutMetrics;
+  private layoutUnsubscribe?: () => void;
   private hexRenderer: HexagonRenderer;
 
   // Containers
@@ -50,11 +52,12 @@ export class BoardRenderer {
   private linePreviewGraphics: Phaser.GameObjects.Graphics[];
   private depthEffects: DepthEffects;
 
-  constructor(scene: Phaser.Scene) {
+  constructor(scene: Phaser.Scene, layout: GameLayoutManager) {
     this.scene = scene;
     this.gridModel = new GridModel(this.BOARD_RADIUS);
     this.themeProvider = new NeonThemeProvider();
-    this.viewportManager = new ViewportManager(scene);
+    this.layout = layout;
+    this.layoutMetrics = this.layout.getMetrics();
     this.hexRenderer = new HexagonRenderer(this.themeProvider);
     // Ensure each grid cell is rotated by 30 degrees for pointy-top look
     this.hexRenderer.setRotationOffset(Math.PI / 6);
@@ -85,61 +88,71 @@ export class BoardRenderer {
     this.depthEffects = DepthEffects.forScene(scene, this.themeProvider);
 
     this.initialize();
+
+    this.layoutUnsubscribe = this.layout.onChange(metrics => {
+      this.applyLayout(metrics);
+    });
+
+    this.scene.events.once(Phaser.Scenes.Events.DESTROY, () => {
+      this.layoutUnsubscribe?.();
+    });
   }
 
   /**
    * Initialize the board
    */
   private initialize(): void {
-    // Calculate optimal hex size based on viewport
-    this.calculateOptimalSize();
-
-    // Generate board cells
-    this.generateBoard();
-
-    // Center the board
-    this.centerBoard();
-
-    // Setup resize listener
-    this.setupResizeListener();
+    this.applyLayout(this.layoutMetrics, true);
 
     // Setup theme change listener
     this.setupThemeListener();
+  }
 
-    // Initial render
+  private applyLayout(metrics: LayoutMetrics, forceRebuild: boolean = false): void {
+    const previousHexSize = this.hexSize;
+
+    this.layoutMetrics = metrics;
+    this.calculateOptimalSize(metrics);
+    this.centerBoard();
+
+    const shouldRebuild =
+      forceRebuild || Math.abs(previousHexSize - this.hexSize) > 1;
+
+    if (shouldRebuild) {
+      this.generateBoard();
+    } else {
+      this.updateExistingCells();
+    }
+
     this.render();
   }
 
   /**
    * Calculate optimal hexagon size for viewport
    */
-  private calculateOptimalSize(): void {
-    // For 1080x1920 resolution, use fixed optimal sizes
-    const { width, height } = this.scene.cameras.main;
+  private calculateOptimalSize(metrics: LayoutMetrics): void {
+    const boardArea = metrics.boardArea;
 
-    // Calculate size needed for radius-3 grid to fit comfortably
-    // Radius 3 = 7 hexagons wide, 7 hexagons tall
     const gridWidth = 7;
     const gridHeight = 7;
 
-    // With 1080x1920 resolution, we have more room for larger hexagons
-    const boardArea = {
-      width: width * 0.9,  // Use 90% of width
-      height: height * 0.45  // Use 45% of height for board
-    };
+    const availableWidth = boardArea.width * 0.92;
+    const availableHeight = boardArea.height * 0.92;
 
-    // Calculate hex size based on available space
-    // Width: size * sqrt(3) * gridWidth
-    // Height: size * 1.5 * gridHeight
-    const sizeByWidth = boardArea.width / (Math.sqrt(3) * gridWidth);
-    const sizeByHeight = boardArea.height / (1.5 * gridHeight);
+    const sizeByWidth = availableWidth / (Math.sqrt(3) * gridWidth);
+    const sizeByHeight = availableHeight / (1.5 * gridHeight);
 
-    // Use the smaller to ensure it fits, with good size for 1080p
-    this.hexSize = Math.min(sizeByWidth, sizeByHeight);
-    this.hexSize = Math.max(this.hexSize, 50); // Minimum size for 1080p
-    this.hexSize = Math.min(this.hexSize, 90); // Maximum size for clarity
+    const baseSize = Math.min(sizeByWidth, sizeByHeight);
 
-    // Add spacing between cells for better visual clarity
+    const inverseZoom = metrics.zoom > 0 ? 1 / metrics.zoom : 1;
+    const targetPhysicalSize = 80; // px on screen
+    const targetWorldSize = targetPhysicalSize * inverseZoom;
+
+    const minWorldSize = 52 * inverseZoom;
+    const maxWorldSize = Math.min(110 * inverseZoom, baseSize);
+
+    const desiredSize = Math.min(baseSize, targetWorldSize);
+    this.hexSize = Phaser.Math.Clamp(desiredSize, minWorldSize, maxWorldSize);
     this.hexSpacing = this.hexSize * 0.08;
   }
 
@@ -160,6 +173,36 @@ export class BoardRenderer {
         this.createCell(coords);
       }
     }
+  }
+
+  private updateExistingCells(): void {
+    this.cellBaseImages.forEach((base, key) => {
+      const coords = this.keyToCoords(key);
+      const position = this.hexToPixelInternal(coords);
+      const fill = this.cellFillImages.get(key);
+      const zone = this.cellInteractives.get(key);
+
+      const radius = this.hexSize - this.hexSpacing;
+      const dim = radius * 2;
+
+      base.setPosition(position.x, position.y);
+      base.setDisplaySize(dim, dim);
+
+      if (fill) {
+        fill.setPosition(position.x, position.y);
+        fill.setDisplaySize(dim - 2, dim - 2);
+      }
+
+      if (zone) {
+        zone.setPosition(position.x, position.y);
+        zone.setSize(this.hexSize * 2, this.hexSize * 2);
+
+        const hitSize = this.hexSize - this.hexSpacing / 2;
+        const rawPoints = this.hexRenderer.getHexPoints(hitSize);
+        const shiftedPoints = rawPoints.map(point => new Phaser.Geom.Point(point.x + this.hexSize, point.y + this.hexSize));
+        zone.setInteractive(new Phaser.Geom.Polygon(shiftedPoints), Phaser.Geom.Polygon.Contains);
+      }
+    });
   }
 
   /**
@@ -379,40 +422,9 @@ export class BoardRenderer {
    * Center the board on screen
    */
   private centerBoard(): void {
-    const viewport = this.viewportManager.getViewport();
-    // Position board much lower on screen, very close to pieces
-    const boardY = viewport.height * 0.55; // Position at 55% from top (much closer to pieces)
-    // Allow subpixel positioning for smoother anti-aliased edges
-    this.boardContainer.setPosition(viewport.centerX, boardY);
-  }
-
-  /**
-   * Setup resize listener
-   */
-  private setupResizeListener(): void {
-    this.scene.scale.on('resize', () => {
-      this.handleResize();
-    });
-  }
-
-  /**
-   * Handle viewport resize
-   */
-  private handleResize(): void {
-    // Recalculate optimal size
-    const oldSize = this.hexSize;
-    this.calculateOptimalSize();
-
-    // Rebuild if size changed significantly
-    if (Math.abs(oldSize - this.hexSize) > 2) {
-      this.generateBoard();
-    }
-
-    // Re-center
-    this.centerBoard();
-
-    // Re-render
-    this.render();
+    const boardArea = this.layoutMetrics.boardArea;
+    const boardCenterY = boardArea.y + boardArea.height / 2;
+    this.boardContainer.setPosition(boardArea.centerX, boardCenterY);
   }
 
   /**
