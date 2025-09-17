@@ -9,19 +9,69 @@ type DevvitGlobal = typeof globalThis & {
   };
 };
 
-function hasRedisContext(): boolean {
+function isFunction<T extends (...args: unknown[]) => unknown>(value: unknown): value is T {
+  return typeof value === 'function';
+}
+
+let redisAvailability: boolean | null = null;
+
+async function ensureRedisAvailable(): Promise<boolean> {
+  if (redisAvailability !== null) {
+    return redisAvailability;
+  }
+
   const devvitGlobal = globalThis as DevvitGlobal;
   const metadataProvider = devvitGlobal.devvit?.metadataProvider;
 
-  if (typeof metadataProvider !== 'function') {
-    return false;
+  if (isFunction(metadataProvider)) {
+    try {
+      if (metadataProvider() !== undefined) {
+        redisAvailability = true;
+        return true;
+      }
+    } catch (error) {
+      console.warn('Devvit metadata provider check failed:', error);
+    }
   }
 
-  try {
-    return metadataProvider() !== undefined;
-  } catch {
-    return false;
+  const redisWithExtras = redis as {
+    ping?: () => Promise<unknown>;
+    exists?: (...keys: string[]) => Promise<number>;
+    zCard?: (key: string) => Promise<number>;
+  };
+
+  if (isFunction(redisWithExtras.ping)) {
+    try {
+      await redisWithExtras.ping();
+      redisAvailability = true;
+      return true;
+    } catch (error) {
+      console.warn('Redis ping availability check failed:', error);
+    }
   }
+
+  if (isFunction(redisWithExtras.exists)) {
+    try {
+      await redisWithExtras.exists('leaderboard:global');
+      redisAvailability = true;
+      return true;
+    } catch (error) {
+      console.warn('Redis exists availability check failed:', error);
+    }
+  }
+
+  if (isFunction(redisWithExtras.zCard)) {
+    try {
+      await redisWithExtras.zCard('leaderboard:global');
+      redisAvailability = true;
+      return true;
+    } catch (error) {
+      console.warn('Redis zCard availability check failed:', error);
+    }
+  }
+
+  redisAvailability = false;
+  return false;
 }
 
 // Realistic Reddit-style usernames
@@ -193,8 +243,8 @@ export async function populateWeeklyLeaderboard(count: number = 35): Promise<voi
  */
 export async function initializeLeaderboards(): Promise<void> {
   try {
-    if (!hasRedisContext()) {
-      console.warn('Skipping leaderboard initialization: Devvit context is not available.');
+    if (!(await ensureRedisAvailable())) {
+      console.warn('Skipping leaderboard initialization: Redis context is not available.');
       return;
     }
 
@@ -244,6 +294,11 @@ export async function initializeLeaderboards(): Promise<void> {
  */
 export async function ensurePlayerInLeaderboard(username: string, score: number): Promise<void> {
   try {
+    if (!(await ensureRedisAvailable())) {
+      console.warn('Skipping leaderboard update: Redis context is not available.');
+      return;
+    }
+
     const applyIfHigher = async (key: string, expirySeconds?: number): Promise<void> => {
       const existingScore = await redis.zScore(key, username);
       const parsedScore = typeof existingScore === 'number'
