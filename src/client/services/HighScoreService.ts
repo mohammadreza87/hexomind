@@ -39,7 +39,7 @@ export class HighScoreService {
   private cachedHighScore: number = 0;
   private lastSync: number = 0;
   private syncInterval: number = 60000; // Sync every minute
-  private initializationPromise: Promise<void>;
+  private initializationPromise: Promise<void> = Promise.resolve();
 
   static getInstance(): HighScoreService {
     if (!HighScoreService.instance) {
@@ -51,7 +51,7 @@ export class HighScoreService {
   constructor() {
     this.seedUsernameFromStorage();
     this.loadCachedScore();
-    this.initializePromise = this.initializeUsername();
+    this.initializationPromise = this.initializeUsername();
   }
 
   /**
@@ -105,7 +105,7 @@ export class HighScoreService {
    */
   async awaitReady(): Promise<void> {
     try {
-      await this.initializePromise;
+      await this.initializationPromise;
     } catch (error) {
       console.error('Failed to initialize HighScoreService username:', error);
     }
@@ -489,7 +489,7 @@ export class HighScoreService {
     this.lastSync = 0;
     this.username = null;
     this.seedUsernameFromStorage();
-    this.initializePromise = this.initializeUsername();
+    this.initializationPromise = this.initializeUsername();
   }
 }
 
