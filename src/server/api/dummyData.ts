@@ -3,6 +3,27 @@
  */
 import { redis } from '@devvit/web/server';
 
+type DevvitGlobal = typeof globalThis & {
+  devvit?: {
+    metadataProvider?: () => unknown;
+  };
+};
+
+function hasRedisContext(): boolean {
+  const devvitGlobal = globalThis as DevvitGlobal;
+  const metadataProvider = devvitGlobal.devvit?.metadataProvider;
+
+  if (typeof metadataProvider !== 'function') {
+    return false;
+  }
+
+  try {
+    return metadataProvider() !== undefined;
+  } catch {
+    return false;
+  }
+}
+
 // Realistic Reddit-style usernames
 const USERNAME_PREFIXES = [
   'Hex', 'Pixel', 'Neon', 'Cyber', 'Retro', 'Arcade', 'Gamer', 'Pro',
@@ -172,6 +193,11 @@ export async function populateWeeklyLeaderboard(count: number = 35): Promise<voi
  */
 export async function initializeLeaderboards(): Promise<void> {
   try {
+    if (!hasRedisContext()) {
+      console.warn('Skipping leaderboard initialization: Devvit context is not available.');
+      return;
+    }
+
     console.log('Initializing leaderboards with dummy data...');
 
     // Check if we already have data
