@@ -21,6 +21,118 @@ import { initializeLeaderboards, ensurePlayerInLeaderboard } from './api/dummyDa
 import { normalizeLeaderboardEntries } from './utils/leaderboard';
 import type { LeaderboardEntry, LeaderboardPeriod } from '../shared/types/leaderboard';
 
+const USERNAME_RESERVATIONS_KEY = 'hexomind:usernames:reservations';
+const USERNAME_OWNER_KEY = 'hexomind:usernames:owners';
+const USER_ID_TO_USERNAME_KEY = 'hexomind:usernames:by-user';
+const USERNAME_RESERVATION_TTL_MS = 5 * 60 * 1000;
+
+interface UsernameReservationRecord {
+  userId: string;
+  timestamp: number;
+  username: string;
+}
+
+interface UsernameOwnerRecord {
+  userId: string;
+  username: string;
+  normalized: string;
+}
+
+interface UserIdToUsernameRecord {
+  username: string;
+  normalized: string;
+}
+
+function parseJsonRecord<T>(value: string | null): T | null {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(value) as T;
+  } catch (error) {
+    console.warn('Failed to parse JSON record:', error);
+    return null;
+  }
+}
+
+async function updateSortedSetMember(
+  key: string,
+  oldMember: string,
+  newMember: string
+): Promise<void> {
+  if (!oldMember || !newMember || oldMember === newMember) {
+    return;
+  }
+
+  const existingScore = await redis.zScore(key, oldMember);
+  const parsedScore = typeof existingScore === 'number'
+    ? existingScore
+    : existingScore !== null
+      ? parseFloat(existingScore)
+      : null;
+
+  if (parsedScore === null || Number.isNaN(parsedScore)) {
+    return;
+  }
+
+  await redis.zRem(key, [oldMember]);
+  await redis.zAdd(key, { score: parsedScore, member: newMember });
+}
+
+async function moveHash(sourceKey: string, targetKey: string): Promise<void> {
+  if (sourceKey === targetKey) {
+    return;
+  }
+
+  const entries = await redis.hGetAll(sourceKey);
+  if (!entries || Object.keys(entries).length === 0) {
+    return;
+  }
+
+  await redis.hSet(targetKey, entries);
+  await redis.del(sourceKey);
+}
+
+async function renameUserArtifacts(oldUsername: string | null, newUsername: string): Promise<void> {
+  if (!oldUsername || oldUsername === newUsername) {
+    return;
+  }
+
+  const oldScoreKey = `highscore:user:${oldUsername}`;
+  const newScoreKey = `highscore:user:${newUsername}`;
+  const existingScore = await redis.get(oldScoreKey);
+  if (existingScore !== null) {
+    await redis.set(newScoreKey, existingScore);
+    await redis.del(oldScoreKey);
+  }
+
+  await moveHash(`highscore:meta:${oldUsername}`, `highscore:meta:${newUsername}`);
+
+  const subredditMetaKeys = await redis.keys(`highscore:meta:${oldUsername}:*`);
+  for (const key of subredditMetaKeys) {
+    const suffix = key.slice(`highscore:meta:${oldUsername}:`.length);
+    await moveHash(key, `highscore:meta:${newUsername}:${suffix}`);
+  }
+
+  await updateSortedSetMember('leaderboard:global', oldUsername, newUsername);
+
+  const dailyKeys = await redis.keys('leaderboard:daily:*');
+  for (const key of dailyKeys) {
+    await updateSortedSetMember(key, oldUsername, newUsername);
+  }
+
+  const weeklyKeys = await redis.keys('leaderboard:weekly:*');
+  for (const key of weeklyKeys) {
+    await updateSortedSetMember(key, oldUsername, newUsername);
+  }
+
+  const subredditKeys = await redis.keys('leaderboard:subreddit:*');
+  for (const key of subredditKeys) {
+    await updateSortedSetMember(key, oldUsername, newUsername);
+  }
+}
+
 const app = express();
 
 // Middleware for JSON body parsing
@@ -355,16 +467,27 @@ router.post('/api/initialize-leaderboards', async (_req, res): Promise<void> => 
 // Get current user endpoint
 router.get('/api/current-user', async (_req, res): Promise<void> => {
   try {
-    // Try to get username from context
-    const username = context.username ||
-                    context.userId ||
-                    (context as any).author ||
-                    (context as any).user ||
-                    null;
+    const userId = context.userId;
+    let customUsername: string | null = null;
+
+    if (userId) {
+      const record = parseJsonRecord<UserIdToUsernameRecord>(
+        await redis.hGet(USER_ID_TO_USERNAME_KEY, userId)
+      );
+      if (record?.username) {
+        customUsername = record.username;
+      }
+    }
+
+    const contextUsername = context.username ||
+      (context as any).author ||
+      (context as any).user ||
+      null;
 
     res.json({
-      username,
-      userId: context.userId,
+      username: contextUsername,
+      customUsername,
+      userId,
       postId: context.postId,
       subreddit: context.subredditName,
       contextKeys: Object.keys(context)
@@ -379,13 +502,18 @@ router.get('/api/current-user', async (_req, res): Promise<void> => {
 router.post('/api/check-username', async (req, res): Promise<void> => {
   try {
     const { username } = req.body;
+    const userId = context.userId;
 
-    if (!username || typeof username !== 'string') {
-      res.status(400).json({ error: 'Username is required' });
+    if (!userId) {
+      res.status(401).json({ error: 'Authentication required', available: false });
       return;
     }
 
-    // Validate username format
+    if (!username || typeof username !== 'string') {
+      res.status(400).json({ error: 'Username is required', available: false });
+      return;
+    }
+
     if (username.length < 3 || username.length > 20 || !/^[a-zA-Z0-9_]+$/.test(username)) {
       res.status(400).json({
         error: 'Invalid username format',
@@ -394,33 +522,130 @@ router.post('/api/check-username', async (req, res): Promise<void> => {
       return;
     }
 
-    // Check if username is already taken
-    const customUsernamesKey = 'hexomind:custom_usernames';
-    const existingUser = await redis.hGet(customUsernamesKey, username.toLowerCase());
+    const normalized = username.toLowerCase();
+    const existingOwner = parseJsonRecord<UsernameOwnerRecord>(
+      await redis.hGet(USERNAME_OWNER_KEY, normalized)
+    );
 
-    if (existingUser) {
+    if (existingOwner && existingOwner.userId !== userId) {
       res.json({
         available: false,
         message: 'Username already taken'
       });
-    } else {
-      // Reserve the username temporarily (expires in 5 minutes)
-      await redis.hSet(customUsernamesKey, {
-        [username.toLowerCase()]: JSON.stringify({
-          reserved: true,
-          timestamp: Date.now(),
-          userId: context.userId || 'anonymous'
-        })
-      });
-
-      res.json({
-        available: true,
-        message: 'Username is available'
-      });
+      return;
     }
+
+    const reservation = parseJsonRecord<UsernameReservationRecord>(
+      await redis.hGet(USERNAME_RESERVATIONS_KEY, normalized)
+    );
+
+    if (reservation) {
+      const expired = Date.now() - reservation.timestamp > USERNAME_RESERVATION_TTL_MS;
+      if (expired) {
+        await redis.hDel(USERNAME_RESERVATIONS_KEY, [normalized]);
+      } else if (reservation.userId !== userId) {
+        res.json({
+          available: false,
+          message: 'Username currently reserved'
+        });
+        return;
+      }
+    }
+
+    const reservationRecord: UsernameReservationRecord = {
+      userId,
+      timestamp: Date.now(),
+      username
+    };
+
+    await redis.hSet(USERNAME_RESERVATIONS_KEY, {
+      [normalized]: JSON.stringify(reservationRecord)
+    });
+    await redis.expire(USERNAME_RESERVATIONS_KEY, Math.ceil(USERNAME_RESERVATION_TTL_MS / 1000));
+
+    res.json({
+      available: true,
+      message: 'Username is available'
+    });
   } catch (error) {
     console.error('Error checking username:', error);
     res.status(500).json({ error: 'Failed to check username availability' });
+  }
+});
+
+router.post('/api/commit-username', async (req, res): Promise<void> => {
+  try {
+    const { username } = req.body;
+    const userId = context.userId;
+
+    if (!userId) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+
+    if (!username || typeof username !== 'string') {
+      res.status(400).json({ error: 'Username is required' });
+      return;
+    }
+
+    if (username.length < 3 || username.length > 20 || !/^[a-zA-Z0-9_]+$/.test(username)) {
+      res.status(400).json({ error: 'Invalid username format' });
+      return;
+    }
+
+    const normalized = username.toLowerCase();
+
+    const reservation = parseJsonRecord<UsernameReservationRecord>(
+      await redis.hGet(USERNAME_RESERVATIONS_KEY, normalized)
+    );
+
+    if (!reservation || reservation.userId !== userId) {
+      res.status(409).json({ error: 'Username reservation missing or expired' });
+      return;
+    }
+
+    if (Date.now() - reservation.timestamp > USERNAME_RESERVATION_TTL_MS) {
+      await redis.hDel(USERNAME_RESERVATIONS_KEY, [normalized]);
+      res.status(409).json({ error: 'Username reservation missing or expired' });
+      return;
+    }
+
+    const existingOwner = parseJsonRecord<UsernameOwnerRecord>(
+      await redis.hGet(USERNAME_OWNER_KEY, normalized)
+    );
+
+    if (existingOwner && existingOwner.userId !== userId) {
+      res.status(409).json({ error: 'Username already taken' });
+      return;
+    }
+
+    const previousRecord = parseJsonRecord<UserIdToUsernameRecord>(
+      await redis.hGet(USER_ID_TO_USERNAME_KEY, userId)
+    );
+    const previousUsername = previousRecord?.username ?? null;
+    const previousNormalized = previousRecord?.normalized ?? null;
+
+    if (previousNormalized && previousNormalized !== normalized) {
+      await redis.hDel(USERNAME_OWNER_KEY, [previousNormalized]);
+    }
+
+    const ownerRecord: UsernameOwnerRecord = { userId, username, normalized };
+    await redis.hSet(USERNAME_OWNER_KEY, {
+      [normalized]: JSON.stringify(ownerRecord)
+    });
+
+    await redis.hSet(USER_ID_TO_USERNAME_KEY, {
+      [userId]: JSON.stringify({ username, normalized })
+    });
+
+    await renameUserArtifacts(previousUsername, username);
+
+    await redis.hDel(USERNAME_RESERVATIONS_KEY, [normalized]);
+
+    res.json({ success: true, username, previousUsername });
+  } catch (error) {
+    console.error('Error committing username:', error);
+    res.status(500).json({ error: 'Failed to save username' });
   }
 });
 
