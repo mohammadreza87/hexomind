@@ -2,7 +2,7 @@ import * as Phaser from 'phaser';
 import { PieceRenderer } from './PieceRenderer';
 import { PieceModel } from '../../core/models/PieceModel';
 import { NeonThemeProvider } from '../theme/NeonThemeProvider';
-import { DS } from '../../config/DesignSystem';
+import { ResponsiveMetrics } from '../../responsive';
 
 /**
  * PieceTray - Manages the display and interaction of available pieces
@@ -12,9 +12,7 @@ export class PieceTray {
   private scene: Phaser.Scene;
   private themeProvider: NeonThemeProvider;
   private container: Phaser.GameObjects.Container;
-  private containerElement: HTMLElement | null = null;
-  private supportsContainerQueries: boolean = false;
-  private containerStyles: CSSStyleDeclaration | null = null;
+  private metrics: ResponsiveMetrics;
 
   private pieceSlots: PieceSlot[] = [];
   private pieceRenderers: Map<string, PieceRenderer> = new Map();
@@ -24,26 +22,17 @@ export class PieceTray {
   private slotSpacing: number = 20; // Spacing between slots
   private trayYPosition: number = 0; // Y position of tray
 
-  constructor(scene: Phaser.Scene, themeProvider: NeonThemeProvider) {
+  constructor(scene: Phaser.Scene, themeProvider: NeonThemeProvider, metrics: ResponsiveMetrics) {
     this.scene = scene;
     this.themeProvider = themeProvider;
+    this.metrics = metrics;
 
     // Create main container with high depth to be above board
     this.container = scene.add.container(0, 0);
     this.container.setDepth(100); // Higher depth to ensure visibility
 
-    this.containerElement = this.resolveContainerElement();
-    this.supportsContainerQueries = this.detectContainerQuerySupport();
-    this.refreshContainerStyles();
-
     this.setupSlots();
-    this.positionTray();
-
-    // Listen for resize
-    scene.scale.on('resize', () => {
-      this.refreshContainerStyles();
-      this.positionTray();
-    });
+    this.updateLayout(metrics);
   }
 
   /**
@@ -79,41 +68,38 @@ export class PieceTray {
     }
   }
 
-  /**
-   * Position the tray on screen
-   */
-  private positionTray(): void {
-    const gameSize = this.scene.scale.gameSize;
-    const width = gameSize?.width ?? this.scene.cameras.main.width;
-    const height = gameSize?.height ?? this.scene.cameras.main.height;
+  public updateLayout(metrics: ResponsiveMetrics): void {
+    this.metrics = metrics;
 
-    this.refreshContainerStyles();
-    const metrics = this.getTrayMetrics(width);
+    const trayArea = metrics.trayArea;
+    const availableWidth = trayArea.width;
+    const availableHeight = trayArea.height;
 
-    // For 1080x1920, use larger fixed slot size
-    const baseSlotSize = 150; // Fixed size for 1080p
-    this.slotSize = baseSlotSize;
+    const widthLimitedSlot = availableWidth / this.SLOT_COUNT;
+    const heightLimitedSlot = availableHeight * 0.85;
+    const slotBase = Math.min(widthLimitedSlot, heightLimitedSlot);
+    const orientationScale = metrics.orientation === 'portrait' ? 0.95 : 0.85;
 
-    const totalSlotsWidth = this.SLOT_COUNT * this.slotSize;
-    const targetAvailableWidth = Math.max(width * metrics.availableWidthRatio, totalSlotsWidth);
+    const minSlot = metrics.orientation === 'portrait' ? 90 : 80;
+    const maxSlot = metrics.orientation === 'portrait' ? 180 : 150;
+
+    this.slotSize = Phaser.Math.Clamp(slotBase * orientationScale, minSlot, maxSlot);
+
     const gapCount = Math.max(this.SLOT_COUNT - 1, 1);
-    const rawGap = (targetAvailableWidth - totalSlotsWidth) / gapCount;
-    this.slotSpacing = Math.max(rawGap, metrics.minSpacing);
+    const occupiedWidth = this.slotSize * this.SLOT_COUNT;
+    const remainingWidth = Math.max(availableWidth - occupiedWidth, 0);
+    const minSpacing = this.slotSize * 0.2;
+    this.slotSpacing = Math.max(remainingWidth / gapCount, minSpacing);
 
-    const occupiedWidth = totalSlotsWidth + this.slotSpacing * (this.SLOT_COUNT - 1);
-    const sidePadding = Math.max((width - occupiedWidth) / 2, metrics.minSpacing);
+    const totalWidth = occupiedWidth + this.slotSpacing * (this.SLOT_COUNT - 1);
+    const startX = trayArea.x + (trayArea.width - totalWidth) / 2 + this.slotSize / 2;
+    this.trayYPosition = trayArea.y + trayArea.height / 2;
 
-    this.trayYPosition = height - height * metrics.bottomOffset;
-
-    const startX = sidePadding + this.slotSize / 2;
-
-    // Position each slot
     this.pieceSlots.forEach((slot, index) => {
       slot.x = startX + index * (this.slotSize + this.slotSpacing);
       slot.y = this.trayYPosition;
 
       if (slot.background) {
-        // Update background size and position
         slot.background.clear();
         const theme = this.themeProvider.getTheme();
         slot.background.fillStyle(theme.cellEmptyAlt, 0.15);
@@ -125,7 +111,6 @@ export class PieceTray {
         slot.background.setPosition(slot.x, slot.y);
       }
 
-      // Update piece position if exists
       if (slot.pieceId) {
         const renderer = this.pieceRenderers.get(slot.pieceId);
         if (renderer) {
@@ -135,140 +120,6 @@ export class PieceTray {
     });
   }
 
-  private resolveContainerElement(): HTMLElement | null {
-    const scaleParent = this.scene.scale?.parent;
-    if (scaleParent instanceof HTMLElement) {
-      return scaleParent;
-    }
-
-    const canvasParent = this.scene.game.canvas?.parentElement;
-    if (canvasParent instanceof HTMLElement) {
-      return canvasParent;
-    }
-
-    return null;
-  }
-
-  private detectContainerQuerySupport(): boolean {
-    if (typeof window === 'undefined' || typeof CSS === 'undefined') {
-      return false;
-    }
-
-    return (
-      !!this.containerElement &&
-      'ResizeObserver' in window &&
-      typeof CSS.supports === 'function' &&
-      CSS.supports('container-type: inline-size')
-    );
-  }
-
-  private refreshContainerStyles(): void {
-    if (!this.supportsContainerQueries || !this.containerElement) {
-      this.containerStyles = null;
-      return;
-    }
-
-    this.containerStyles = getComputedStyle(this.containerElement);
-  }
-
-  private getContainerMetric(varName: string, fallback: number): number {
-    if (!this.supportsContainerQueries || !this.containerStyles) {
-      return fallback;
-    }
-
-    const raw = this.containerStyles.getPropertyValue(varName);
-    if (!raw) {
-      return fallback;
-    }
-
-    const parsed = parseFloat(raw);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  }
-
-  private getTrayMetrics(containerWidth: number): TrayMetrics {
-    if (this.supportsContainerQueries && this.containerStyles) {
-      return {
-        slotMin: this.getContainerMetric('--game-tray-slot-min', 60),
-        slotMax: this.getContainerMetric('--game-tray-slot-max', 100),
-        availableWidthRatio: this.getContainerMetric('--game-tray-available-width', 0.9),
-        bottomOffset: this.getContainerMetric('--game-tray-bottom-offset', 0.12),
-        minSpacing: this.getContainerMetric('--game-tray-min-spacing', 12),
-      };
-    }
-
-    return this.getFallbackTrayMetrics(containerWidth);
-  }
-
-  private getFallbackTrayMetrics(containerWidth: number): TrayMetrics {
-    const defaults: TrayMetrics = {
-      slotMin: 60,
-      slotMax: 100,
-      availableWidthRatio: 0.9,
-      bottomOffset: 0.12,
-      minSpacing: 12,
-    };
-
-    const breakpointValues: Array<{ minWidth: number; metrics: Partial<TrayMetrics> }> = [
-      {
-        minWidth: DS.BREAKPOINTS.xxl,
-        metrics: {
-          slotMin: 100,
-          slotMax: 144,
-          availableWidthRatio: 0.72,
-          bottomOffset: 0.06,
-          minSpacing: 22,
-        },
-      },
-      {
-        minWidth: DS.BREAKPOINTS.xl,
-        metrics: {
-          slotMin: 90,
-          slotMax: 130,
-          availableWidthRatio: 0.76,
-          bottomOffset: 0.07,
-          minSpacing: 20,
-        },
-      },
-      {
-        minWidth: DS.BREAKPOINTS.lg,
-        metrics: {
-          slotMin: 80,
-          slotMax: 120,
-          availableWidthRatio: 0.8,
-          bottomOffset: 0.08,
-          minSpacing: 18,
-        },
-      },
-      {
-        minWidth: DS.BREAKPOINTS.md,
-        metrics: {
-          slotMin: 72,
-          slotMax: 112,
-          availableWidthRatio: 0.84,
-          bottomOffset: 0.09,
-          minSpacing: 16,
-        },
-      },
-      {
-        minWidth: DS.BREAKPOINTS.sm,
-        metrics: {
-          slotMin: 64,
-          slotMax: 108,
-          availableWidthRatio: 0.88,
-          bottomOffset: 0.1,
-          minSpacing: 14,
-        },
-      },
-    ];
-
-    for (const entry of breakpointValues) {
-      if (containerWidth >= entry.minWidth) {
-        return { ...defaults, ...entry.metrics };
-      }
-    }
-
-    return defaults;
-  }
 
   /**
    * Add pieces to the tray
@@ -514,12 +365,4 @@ interface PieceSlot {
   occupied: boolean;
   pieceId: string | null;
   background: Phaser.GameObjects.Graphics | null;
-}
-
-interface TrayMetrics {
-  slotMin: number;
-  slotMax: number;
-  availableWidthRatio: number;
-  bottomOffset: number;
-  minSpacing: number;
 }
