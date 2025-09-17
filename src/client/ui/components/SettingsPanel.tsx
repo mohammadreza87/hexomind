@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { gsap } from 'gsap';
+import { highScoreService } from '../../services/HighScoreService';
 import { useUIStore } from '../store/uiStore';
 import { useGameStore } from '../store/gameStore';
 
@@ -62,8 +63,25 @@ export const SettingsPanel: React.FC = () => {
     });
   };
 
-  const handleSaveUsername = () => {
-    localStorage.setItem('hexomind_username', username);
+  const handleSaveUsername = async () => {
+    const trimmedUsername = username.trim();
+
+    if (!trimmedUsername) {
+      return;
+    }
+
+    try {
+      await highScoreService.setCustomUsername(trimmedUsername, { offlineOnly: true });
+      setUsername(trimmedUsername);
+    } catch (error) {
+      console.error('Failed to save username locally:', error);
+      localStorage.setItem('hexomind_custom_username', JSON.stringify({
+        username: trimmedUsername,
+        timestamp: Date.now()
+      }));
+      localStorage.setItem('hexomind_username', trimmedUsername);
+    }
+
     // Show save animation
     const indicator = document.querySelector('.save-indicator');
     if (indicator) {
@@ -112,6 +130,8 @@ export const SettingsPanel: React.FC = () => {
       // Clear all local storage
       localStorage.removeItem('hexomind_gamestate');
       localStorage.removeItem('hexomind_highscore');
+      localStorage.removeItem('hexomind_custom_username');
+      localStorage.removeItem('hexomind_username');
 
       // Reset game in Phaser
       if (window.game) {
