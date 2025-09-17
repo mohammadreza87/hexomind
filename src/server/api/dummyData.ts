@@ -175,7 +175,7 @@ export async function initializeLeaderboards(): Promise<void> {
     console.log('Initializing leaderboards with dummy data...');
 
     // Check if we already have data
-    const globalCount = await redis.zcard('leaderboard:global');
+    const globalCount = await redis.zCard('leaderboard:global');
 
     if (globalCount < 50) {
       // Populate with different amounts for variety
@@ -189,7 +189,7 @@ export async function initializeLeaderboards(): Promise<void> {
 
       // Still populate daily and weekly if needed
       const today = new Date().toISOString().split('T')[0];
-      const dailyCount = await redis.zcard(`leaderboard:daily:${today}`);
+      const dailyCount = await redis.zCard(`leaderboard:daily:${today}`);
 
       if (dailyCount < 10) {
         await populateDailyLeaderboard(Math.floor(Math.random() * 10) + 10);
@@ -202,7 +202,7 @@ export async function initializeLeaderboards(): Promise<void> {
       const oneWeek = 1000 * 60 * 60 * 24 * 7;
       const week = Math.floor(diff / oneWeek) + 1;
       const year = now.getFullYear();
-      const weeklyCount = await redis.zcard(`leaderboard:weekly:${year}:${week}`);
+      const weeklyCount = await redis.zCard(`leaderboard:weekly:${year}:${week}`);
 
       if (weeklyCount < 25) {
         await populateWeeklyLeaderboard(Math.floor(Math.random() * 25) + 25);

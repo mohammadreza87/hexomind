@@ -341,7 +341,7 @@ export async function getGameStatistics(): Promise<{
   topScore: number;
 }> {
   try {
-    const totalPlayers = await redis.zcard('leaderboard:global') || 0;
+    const totalPlayers = await redis.zCard('leaderboard:global') || 0;
     const totalGamesKey = 'stats:total_games';
     const totalGames = parseInt(await redis.get(totalGamesKey) || '0');
 
