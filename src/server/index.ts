@@ -1,7 +1,7 @@
 import express, { type Request } from 'express';
 import { InitResponse, IncrementResponse, DecrementResponse } from '../shared/types/api';
 import { redis, createServer, context } from '@devvit/web/server';
-import { createPost } from './core/post';
+import { createPost, createChallengePost } from './core/post';
 import { handleColormindRequest } from './api/colormind';
 import {
   getUserHighScore,
@@ -685,6 +685,123 @@ router.post('/api/commit-username', async (req, res): Promise<void> => {
   } catch (error) {
     console.error('Error committing username:', error);
     res.status(500).json({ error: 'Failed to save username' });
+  }
+});
+
+/**
+ * Share Score Challenge - Viral mechanics for social sharing
+ * Creates engaging Reddit posts to drive community challenges
+ */
+router.post('/api/share-challenge', async (req, res): Promise<void> => {
+  try {
+    const { score, username, rank, period = 'global' } = req.body;
+
+    if (!score || !username) {
+      res.status(400).json({ error: 'Score and username required' });
+      return;
+    }
+
+    // Viral title generation with psychological triggers
+    const getRankEmoji = (rank: number) => {
+      if (rank === 1) return '👑';
+      if (rank === 2) return '🥈';
+      if (rank === 3) return '🥉';
+      if (rank <= 10) return '🔥';
+      if (rank <= 25) return '⭐';
+      if (rank <= 50) return '💪';
+      if (rank <= 100) return '🎯';
+      return '🎮';
+    };
+
+    const getScoreLevel = (score: number) => {
+      if (score >= 50000) return 'GODLIKE';
+      if (score >= 25000) return 'LEGENDARY';
+      if (score >= 10000) return 'MASTER';
+      if (score >= 5000) return 'EXPERT';
+      if (score >= 2500) return 'PRO';
+      if (score >= 1000) return 'SKILLED';
+      if (score >= 500) return 'RISING STAR';
+      return 'CHALLENGER';
+    };
+
+    const level = getScoreLevel(score);
+    const emoji = getRankEmoji(rank);
+    const formattedScore = score.toLocaleString();
+
+    // Viral title formats with A/B testing variety
+    const titleFormats = [
+      `${emoji} Can you beat my ${level} score? I got ${formattedScore} points in Hexomind! ${emoji}`,
+      `${emoji} ${username} just DESTROYED with ${formattedScore} points! Think you can beat it? 🎮`,
+      `🚨 NEW ${level} PLAYER: ${formattedScore} points! Can anyone beat ${username}? ${emoji}`,
+      `${emoji} Rank #${rank} with ${formattedScore} points! Who's taking my crown? 👑`,
+      `💥 ${level} ALERT: ${formattedScore} points! Beat me if you can! 🎯 #Hexomind`,
+      `🔥 Just hit ${formattedScore} in Hexomind! ${username} challenges YOU! ${emoji}`,
+      `⚡ ${level} MODE: ${formattedScore} points! Show me what you got! 🎮`,
+      `🎯 Challenge Accepted? Beat my ${formattedScore} score! - ${username} ${emoji}`
+    ];
+
+    const title = titleFormats[Math.floor(Math.random() * titleFormats.length)];
+
+    // Create the viral challenge post with custom title
+    const post = await createChallengePost(title);
+
+    const challengeId = `challenge:${Date.now()}:${username}`;
+
+    // Store challenge data for tracking
+    await redis.hSet(challengeId, {
+      challengerName: username,
+      challengeScore: score.toString(),
+      challengerRank: rank.toString(),
+      period,
+      postId: post.id,
+      timestamp: Date.now().toString(),
+      subreddit: context.subredditName || ''
+    });
+
+    // Track share analytics (manual increment since hincrby is not available in Devvit)
+    const shareKey = `shares:${context.subredditName}:${new Date().toISOString().split('T')[0]}`;
+    const shareData = await redis.hGetAll(shareKey);
+    const currentTotal = parseInt(shareData?.total || '0');
+    const currentUserShares = parseInt(shareData?.[username] || '0');
+    await redis.hSet(shareKey, {
+      total: (currentTotal + 1).toString(),
+      [username]: (currentUserShares + 1).toString()
+    });
+
+    // Increment user's share count for rewards/achievements (manual increment)
+    const userStatsKey = `user:${username}:stats`;
+    const userStats = await redis.hGetAll(userStatsKey);
+    const currentShares = parseInt(userStats?.shares || '0');
+    const currentViralScore = parseInt(userStats?.viral_score || '0');
+    await redis.hSet(userStatsKey, {
+      shares: (currentShares + 1).toString(),
+      viral_score: (currentViralScore + Math.floor(score / 100)).toString()
+    });
+
+    // Add to trending challenges list
+    await redis.zAdd(`trending:challenges`, {
+      score: Date.now(),
+      member: challengeId
+    });
+
+    // Expire old challenges after 7 days
+    await redis.expire(challengeId, 7 * 24 * 60 * 60);
+
+    res.json({
+      success: true,
+      postId: post.id,
+      postUrl: `https://reddit.com/r/${context.subredditName}/comments/${post.id}`,
+      challengeId,
+      message: '🔥 Challenge posted! Let the games begin!',
+      viralScore: Math.floor(score / 100)
+    });
+
+  } catch (error: any) {
+    console.error('Failed to share challenge:', error);
+    res.status(500).json({
+      error: 'Failed to create challenge',
+      details: error?.message
+    });
   }
 });
 

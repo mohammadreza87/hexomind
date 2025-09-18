@@ -7,7 +7,7 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  background: radial-gradient(circle at top, rgba(48, 54, 83, 0.22), rgba(12, 12, 18, 0.9));
+  background: transparent; /* Let gradient background show through */
   overflow: hidden;
 }
 
@@ -19,7 +19,7 @@
   max-height: 100vh;
   object-fit: contain;
   border-radius: 20px;
-  background: #050507;
+  background: transparent; /* Let gradient background show through */
   box-shadow: 0 24px 72px rgba(0, 0, 0, 0.45);
   image-rendering: crisp-edges;
   -ms-interpolation-mode: nearest-neighbor;

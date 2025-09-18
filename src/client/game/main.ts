@@ -42,7 +42,7 @@ const buildGameConfig = (
 ): Phaser.Types.Core.GameConfig => ({
   type: Phaser.WEBGL, // Force WebGL for better performance
   parent,
-  backgroundColor: 0x000000, // Pure black background
+  transparent: true, // Transparent background to show gradient
   resolution,
   scale: {
     mode: Phaser.Scale.NONE, // No scaling, fixed size
@@ -65,7 +65,7 @@ const buildGameConfig = (
     antialiasGL: true, // WebGL antialiasing
     pixelArt: false,
     roundPixels: false, // Don't round pixels - allow smooth positioning
-    transparent: false, // Solid background
+    transparent: true, // Transparent background to show gradient
     clearBeforeRender: true,
     preserveDrawingBuffer: false,
     premultipliedAlpha: true,

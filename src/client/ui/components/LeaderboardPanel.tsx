@@ -137,7 +137,7 @@ export const LeaderboardPanel: React.FC = () => {
                   <button
                     key={type}
                     onClick={() => setActiveTab(type)}
-                    className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all duration-200 ${
+                    className={`flex-1 py-4 px-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all duration-200 ${
                       activeTab === type
                         ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
                         : 'bg-white/5 text-white/60 hover:bg-white/10'
@@ -235,7 +235,7 @@ export const LeaderboardPanel: React.FC = () => {
               </div>
 
               {/* Your Position */}
-              <div className="pt-2">
+              <div className="pt-2" style={{ paddingRight: '0.35rem' }}>
                 {!loading && !error && entries.length > 0 && (() => {
                   const mine = entries.find(entry => entry.username === currentUser);
 
@@ -244,32 +244,106 @@ export const LeaderboardPanel: React.FC = () => {
                   }
 
                   return (
-                    <div
-                      style={{
-                        padding: '0.7rem 0.875rem',
-                        minHeight: '42px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between'
-                      }}
-                      className="rounded-xl bg-gradient-to-r from-purple-500/20 to-pink-500/20"
-                    >
-                      <div className="flex items-center" style={{gap: '0.7rem'}}>
-                        <div style={{
-                          minWidth: '32px',
-                          textAlign: 'center',
-                          fontSize: '0.8rem',
-                          fontWeight: 'bold'
-                        }} className="text-purple-400">
-                          #{mine.rank}
+                    <div className="flex flex-col gap-3">
+                      <div
+                        style={{
+                          padding: '0.7rem 0.875rem',
+                          minHeight: '42px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between'
+                        }}
+                        className="rounded-xl bg-gradient-to-r from-purple-500/20 to-pink-500/20"
+                      >
+                        <div className="flex items-center" style={{gap: '0.7rem'}}>
+                          <div style={{
+                            minWidth: '32px',
+                            textAlign: 'center',
+                            fontSize: '0.8rem',
+                            fontWeight: 'bold'
+                          }} className="text-purple-400">
+                            #{mine.rank}
+                          </div>
+                          <div style={{fontSize: '0.75rem', fontWeight: '500'}} className="text-purple-400">
+                            {mine.username}
+                          </div>
                         </div>
-                        <div style={{fontSize: '0.75rem', fontWeight: '500'}} className="text-purple-400">
-                          {mine.username}
+                        <div style={{fontSize: '0.8rem', fontWeight: 'bold', paddingLeft: '0.7rem'}} className="text-purple-400">
+                          {mine.score.toLocaleString()}
                         </div>
                       </div>
-                      <div style={{fontSize: '0.8rem', fontWeight: 'bold', paddingLeft: '0.7rem'}} className="text-purple-400">
-                        {mine.score.toLocaleString()}
-                      </div>
+
+                      {/* Viral Share Button */}
+                      <button
+                        onClick={async () => {
+                          try {
+                            const response = await fetch('/api/share-challenge', {
+                              method: 'POST',
+                              headers: {
+                                'Content-Type': 'application/json',
+                              },
+                              body: JSON.stringify({
+                                score: mine.score,
+                                username: mine.username,
+                                rank: mine.rank,
+                                period: activeTab
+                              })
+                            });
+
+                            const data = await response.json();
+
+                            if (data.success) {
+                              // Animate button success
+                              const btn = document.querySelector('.share-challenge-btn');
+                              if (btn) {
+                                btn.classList.add('share-success');
+                                setTimeout(() => btn.classList.remove('share-success'), 2000);
+                              }
+
+                              // Open the Reddit post in new tab
+                              if (data.postUrl) {
+                                window.open(data.postUrl, '_blank');
+                              }
+
+                              // Show success message
+                              console.log(data.message);
+                            }
+                          } catch (error) {
+                            console.error('Failed to share challenge:', error);
+                          }
+                        }}
+                        className="share-challenge-btn w-full py-3 px-4 rounded-xl bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600 text-white font-bold text-sm tracking-wider transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl flex items-center justify-center gap-2 group"
+                        style={{
+                          position: 'relative',
+                          overflow: 'hidden'
+                        }}
+                      >
+                        {/* Animated gradient overlay */}
+                        <div className="absolute inset-0 bg-gradient-to-r from-yellow-400/20 via-transparent to-yellow-400/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500 animate-pulse" />
+
+                        {/* Icon and text */}
+                        <svg className="w-4 h-4 group-hover:rotate-12 transition-transform" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z" />
+                        </svg>
+                        <span className="relative z-10">
+                          🔥 CHALLENGE FRIENDS
+                        </span>
+                        <span className="text-xs opacity-75">
+                          (#{mine.rank})
+                        </span>
+                      </button>
+
+                      <style jsx>{`
+                        .share-success {
+                          animation: shareSuccess 0.5s ease-out;
+                        }
+
+                        @keyframes shareSuccess {
+                          0% { transform: scale(1); }
+                          50% { transform: scale(1.1); background: linear-gradient(to right, #10b981, #3b82f6); }
+                          100% { transform: scale(1); }
+                        }
+                      `}</style>
                     </div>
                   );
                 })()}

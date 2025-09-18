@@ -122,9 +122,8 @@ export class MainScene extends Phaser.Scene {
     // Initialize theme provider
     this.themeProvider = new NeonThemeProvider();
 
-    // Set background based on theme
-    const theme = this.themeProvider.getPhaserTheme();
-    this.cameras.main.setBackgroundColor(theme.backgroundColor);
+    // Don't set background color - let it be transparent to show gradient
+    // this.cameras.main.setBackgroundColor(theme.backgroundColor);
 
     // Resolve initial responsive metrics
     this.responsiveMetrics = (this.registry.get('responsive:metrics') as ResponsiveMetrics | undefined)
@@ -847,10 +846,9 @@ export class MainScene extends Phaser.Scene {
    */
   private handleThemeChange(): void {
     const theme = this.themeProvider.getTheme();
-    const bgColor = this.themeProvider.getPhaserTheme().backgroundColor;
 
-    // Update background
-    this.cameras.main.setBackgroundColor(bgColor);
+    // Don't update background - keep it transparent
+    // this.cameras.main.setBackgroundColor(bgColor);
 
     // Update text colors
     this.scoreText.setColor(this.themeProvider.toCSS(theme.textPrimary));

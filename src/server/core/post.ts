@@ -14,3 +14,18 @@ export const createPost = async () => {
     title: 'hexomind',
   });
 };
+
+export const createChallengePost = async (title: string) => {
+  const { subredditName } = context;
+  if (!subredditName) {
+    throw new Error('subredditName is required');
+  }
+
+  return await reddit.submitCustomPost({
+    splash: {
+      appDisplayName: 'hexomind',
+    },
+    subredditName: subredditName,
+    title: title,
+  });
+};
