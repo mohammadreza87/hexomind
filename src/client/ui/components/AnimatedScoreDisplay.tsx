@@ -142,7 +142,7 @@ export const AnimatedScoreDisplay: React.FC<AnimatedScoreDisplayProps> = ({ scor
         {/* High Score */}
         <div ref={highScoreRef} className="relative pt-3 border-t border-white/10">
           <div className="text-xs text-white/50">BEST</div>
-          <div className="text-lg font-semibold text-white/80">
+          <div className="text-sm font-semibold text-white/80">
             {highScore.toLocaleString()}
           </div>
         </div>

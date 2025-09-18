@@ -10,6 +10,7 @@ import {
   ensureFakeWeeklyLeaderboard,
   getFakeMetadataKey
 } from './dummyData';
+import { logger } from '../utils/logger';
 import {
   getDailyBucket,
   getDailyFakeKey,
@@ -92,7 +93,7 @@ function parseFakeMetadata(raw: unknown): { timestamp?: number } {
       return { timestamp: data.timestamp };
     }
   } catch (error) {
-    console.warn('Failed to parse fake leaderboard metadata:', error);
+    logger.warn('Failed to parse fake leaderboard metadata:', error);
   }
   return {};
 }
@@ -286,6 +287,42 @@ export async function setUserHighScore(username: string, score: number): Promise
   } catch (error) {
     console.error('Error setting user high score:', error);
     return false;
+  }
+}
+
+export async function resetUserHighScore(username: string): Promise<void> {
+  try {
+    const key = `highscore:user:${username}`;
+    await redis.del(key);
+
+    const metaKey = `highscore:meta:${username}`;
+    await redis.del(metaKey);
+
+    await redis.zRem(GLOBAL_REAL_KEY, [username]);
+
+    const dailyKeys = await redis.keys('leaderboard:daily:*');
+    const weeklyKeys = await redis.keys('leaderboard:weekly:*');
+    const subredditKeys = await redis.keys('leaderboard:subreddit:*');
+
+    const removals: Promise<unknown>[] = [];
+
+    dailyKeys
+      .filter(key => !key.endsWith(':fake'))
+      .forEach(key => removals.push(redis.zRem(key, [username])));
+
+    weeklyKeys
+      .filter(key => !key.endsWith(':fake'))
+      .forEach(key => removals.push(redis.zRem(key, [username])));
+
+    subredditKeys.forEach(key => removals.push(redis.zRem(key, [username])));
+
+    const subredditMetaKeys = await redis.keys(`highscore:meta:${username}:*`);
+    subredditMetaKeys.forEach(key => removals.push(redis.del(key)));
+
+    await Promise.all(removals);
+  } catch (error) {
+    console.error('Error resetting user high score:', error);
+    throw error;
   }
 }
 

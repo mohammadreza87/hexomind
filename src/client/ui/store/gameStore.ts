@@ -2,7 +2,7 @@ import { create } from 'zustand';
 
 interface GameStore {
   // Game state
-  gameState: 'idle' | 'playing' | 'paused' | 'gameOver';
+  gameState: 'idle' | 'playing' | 'paused' | 'gameOver' | 'sharePrompt';
   score: number;
   highScore: number;
   combo: number;
@@ -10,6 +10,8 @@ interface GameStore {
   moves: number;
   showNoSpaceToast: boolean;
   lineClearPopup: { lines: number; score: number } | null;
+  shareRescueOffer: ShareRescueOffer | null;
+  shareStatus: ShareStatus;
 
   // Actions
   setGameState: (state: GameStore['gameState']) => void;
@@ -22,7 +24,24 @@ interface GameStore {
   setShowNoSpaceToast: (show: boolean) => void;
   showLineClearPopup: (lines: number, score: number) => void;
   hideLineClearPopup: () => void;
+  setShareRescueOffer: (offer: ShareRescueOffer | null) => void;
+  setShareStatus: (status: Partial<ShareStatus>) => void;
 }
+
+export interface ShareStatus {
+  sharedToday: boolean;
+  shareCountToday: number;
+  totalShares: number;
+  lastShareAt: number | null;
+}
+
+export interface ShareRescueOffer {
+  score: number;
+  highScore: number;
+  screenshot: string | null;
+  username: string;
+}
+
 
 export const useGameStore = create<GameStore>((set) => ({
   // Initial state
@@ -34,6 +53,13 @@ export const useGameStore = create<GameStore>((set) => ({
   moves: 0,
   showNoSpaceToast: false,
   lineClearPopup: null,
+  shareRescueOffer: null,
+  shareStatus: {
+    sharedToday: false,
+    shareCountToday: 0,
+    totalShares: 0,
+    lastShareAt: null,
+  },
 
   // Actions
   setGameState: (state) => set({ gameState: state }),
@@ -53,8 +79,16 @@ export const useGameStore = create<GameStore>((set) => ({
     moves: 0,
     showNoSpaceToast: false,
     lineClearPopup: null,
-  }),
+    shareRescueOffer: null,
+    }),
   setShowNoSpaceToast: (show) => set({ showNoSpaceToast: show }),
   showLineClearPopup: (lines, score) => set({ lineClearPopup: { lines, score } }),
   hideLineClearPopup: () => set({ lineClearPopup: null }),
+  setShareRescueOffer: (offer) => set({ shareRescueOffer: offer }),
+  setShareStatus: (status) => set((state) => ({
+    shareStatus: {
+      ...state.shareStatus,
+      ...status,
+    },
+  })),
 }));

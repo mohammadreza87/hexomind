@@ -1,3 +1,5 @@
+import { logger } from './logger';
+
 /**
  * Error boundary utilities for Phaser game
  * Provides graceful error handling and recovery
@@ -88,19 +90,19 @@ export class GameErrorBoundary {
   }
 
   private handleAssetError(error: Error): void {
-    console.warn('Asset loading error, attempting fallback:', error);
+    logger.warn('Asset loading error, attempting fallback:', error);
     // Could implement fallback assets or retry logic here
     this.showErrorNotification(new Error('Some game assets failed to load. The game may not display correctly.'), 'assets');
   }
 
   private handleAnimationError(error: Error): void {
-    console.warn('Animation error, disabling animations:', error);
+    logger.warn('Animation error, disabling animations:', error);
     // Disable animations as fallback
     this.showErrorNotification(new Error('Animation error detected. Some animations have been disabled.'), 'animation');
   }
 
   private handleRenderError(error: Error): void {
-    console.warn('Rendering error:', error);
+    logger.warn('Rendering error:', error);
     this.showErrorNotification(new Error('Rendering issue detected. Please refresh the page if the game does not display correctly.'), 'render');
   }
 
@@ -142,7 +144,7 @@ export class GameErrorBoundary {
     const strategy = this.recoveryStrategies.get(context);
     if (strategy) {
       try {
-        console.log(`Attempting recovery for context: ${context}`);
+        logger.debug(`Attempting recovery for context: ${context}`);
         strategy();
       } catch (recoveryError) {
         console.error('Recovery strategy failed:', recoveryError);

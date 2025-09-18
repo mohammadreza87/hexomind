@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { useGameStore } from './store/gameStore';
 import '../styles/tailwind.css';
+import { logger } from '../utils/logger';
 
 // Expose game store globally for Phaser integration
 declare global {
@@ -33,7 +34,7 @@ export function initializeReactUI(): void {
     </React.StrictMode>
   );
 
-  console.log('React UI initialized successfully');
+  logger.debug('React UI initialized successfully');
 }
 
 /**

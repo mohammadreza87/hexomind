@@ -3,6 +3,7 @@ import { gsap } from 'gsap';
 import { useUIStore } from '../store/uiStore';
 import { leaderboardService } from '../../services/LeaderboardService';
 import { highScoreService } from '../../services/HighScoreService';
+import { logger } from '../../utils/logger';
 import type { LeaderboardViewEntry, LeaderboardViewPeriod } from '../../services/LeaderboardService';
 
 type LeaderboardType = 'global' | 'daily' | 'weekly';
@@ -310,7 +311,7 @@ export const LeaderboardPanel: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Viral Share Button */}
+                      {/* Viral Share Button with smooth bump animation */}
                       <button
                         onClick={async () => {
                           if (sharing) {
@@ -352,7 +353,7 @@ export const LeaderboardPanel: React.FC = () => {
                               }
 
                               // Show success message
-                              console.log(data.message);
+                              logger.info(data.message);
                             }
                           } catch (error) {
                             console.error('Failed to share challenge:', error);
@@ -360,7 +361,7 @@ export const LeaderboardPanel: React.FC = () => {
                             setSharing(false);
                           }
                         }}
-                        className={`share-challenge-btn w-full py-3 px-4 rounded-xl bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600 text-white font-bold text-sm tracking-wider transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl flex items-center justify-center gap-2 group ${
+                        className={`share-challenge-btn w-full py-3 px-4 rounded-xl bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600 text-white font-bold text-sm tracking-wider transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl flex items-center justify-center gap-2 group animate-bump ${
                           sharing ? 'opacity-60 cursor-not-allowed hover:scale-100' : ''
                         }`}
                         disabled={sharing}
@@ -385,6 +386,25 @@ export const LeaderboardPanel: React.FC = () => {
                       </button>
 
                       <style jsx>{`
+                        .animate-bump {
+                          animation: smoothBump 3s ease-in-out infinite;
+                        }
+
+                        .animate-bump:hover {
+                          animation: none;
+                        }
+
+                        @keyframes smoothBump {
+                          0%, 100% {
+                            transform: scale(1) translateY(0);
+                            box-shadow: 0 10px 25px rgba(249, 115, 22, 0.3);
+                          }
+                          50% {
+                            transform: scale(1.05) translateY(-2px);
+                            box-shadow: 0 15px 35px rgba(249, 115, 22, 0.5);
+                          }
+                        }
+
                         .share-success {
                           animation: shareSuccess 0.5s ease-out;
                         }

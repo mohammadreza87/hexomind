@@ -60,7 +60,9 @@ export const GameOverPanel: React.FC<GameOverPanelProps> = ({
     );
   }, [score, highScore]);
 
-  if (!isVisible) return null;
+  if (!isVisible) {
+    return null;
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-8 pointer-events-auto">

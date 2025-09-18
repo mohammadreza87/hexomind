@@ -3,8 +3,16 @@ import { useUIStore } from '../store/uiStore';
 import { useGameStore } from '../store/gameStore';
 
 export const MenuSystem: React.FC = () => {
-  const { closeAllPanels, toggleLeaderboard, toggleSettings } = useUIStore();
-  const { gameState, setGameState, resetGame } = useGameStore();
+  const { closeAllPanels, toggleLeaderboard, toggleSettings } = useUIStore((state) => ({
+    closeAllPanels: state.closeAllPanels,
+    toggleLeaderboard: state.toggleLeaderboard,
+    toggleSettings: state.toggleSettings,
+  }));
+  const { gameState, setGameState, resetGame } = useGameStore((state) => ({
+    gameState: state.gameState,
+    setGameState: state.setGameState,
+    resetGame: state.resetGame,
+  }));
 
   const handleResume = () => {
     setGameState('playing');

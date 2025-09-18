@@ -2,6 +2,7 @@
  * Generate dummy leaderboard data for better UX
  */
 import { redis } from '@devvit/web/server';
+import { logger } from '../utils/logger';
 
 import {
   getDailyBucket,
@@ -50,7 +51,7 @@ async function ensureRedisAvailable(): Promise<boolean> {
         return true;
       }
     } catch (error) {
-      console.warn('Devvit metadata provider check failed:', error);
+      logger.warn('Devvit metadata provider check failed:', error);
     }
   }
 
@@ -287,7 +288,7 @@ export async function initializeLeaderboards(): Promise<void> {
 export async function ensurePlayerInLeaderboard(username: string, score: number): Promise<void> {
   try {
     if (!(await ensureRedisAvailable())) {
-      console.warn('Skipping leaderboard update: Redis context is not available.');
+      logger.warn('Skipping leaderboard update: Redis context is not available.');
       return;
     }
 
@@ -318,7 +319,7 @@ export async function ensurePlayerInLeaderboard(username: string, score: number)
     const weeklyKey = getWeeklyLeaderboardKey();
     await applyIfHigher(weeklyKey, WEEKLY_TTL_SECONDS);
 
-    console.log(`Ensured ${username} appears in leaderboards with score ${score}`);
+    logger.debug(`Ensured ${username} appears in leaderboards with score ${score}`);
   } catch (error) {
     console.error('Error ensuring player in leaderboard:', error);
   }

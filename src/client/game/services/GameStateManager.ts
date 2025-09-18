@@ -1,3 +1,4 @@
+import { logger } from '../../utils/logger';
 import { HexCoordinates } from '../../shared/types/grid';
 import { PieceColor, PieceType } from '../../shared/types/piece';
 
@@ -59,7 +60,7 @@ export class GameStateManager {
       };
 
       localStorage.setItem(this.SAVE_KEY, JSON.stringify(saveData));
-      console.log('Game state saved successfully');
+      logger.debug('Game state saved successfully');
     } catch (error) {
       console.error('Failed to save game state:', error);
     }
@@ -77,7 +78,7 @@ export class GameStateManager {
 
       // Check version compatibility
       if (data.version !== this.CURRENT_VERSION) {
-        console.warn('Save version mismatch, clearing old save');
+        logger.warn('Save version mismatch, clearing old save');
         this.clearGameState();
         return null;
       }
@@ -85,7 +86,7 @@ export class GameStateManager {
       // Check if save is too old (more than 30 days)
       const daysSinceSave = (Date.now() - data.timestamp) / (1000 * 60 * 60 * 24);
       if (daysSinceSave > 30) {
-        console.log('Save is too old, clearing');
+        logger.debug('Save is too old, clearing');
         this.clearGameState();
         return null;
       }
@@ -104,7 +105,7 @@ export class GameStateManager {
   static clearGameState(): void {
     try {
       localStorage.removeItem(this.SAVE_KEY);
-      console.log('Game state cleared');
+      logger.debug('Game state cleared');
     } catch (error) {
       console.error('Failed to clear game state:', error);
     }

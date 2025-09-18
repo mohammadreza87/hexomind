@@ -25,6 +25,8 @@ export default defineConfig(({ mode }) => {
         terserOptions: {
           compress: {
             passes: 2,
+            drop_console: true,
+            drop_debugger: true,
           },
           mangle: true,
           format: {

@@ -31,12 +31,55 @@ body {
   width: 100%;
   height: 100vh;
   overflow: hidden;
-  background: #000000; /* Pure black background */
+  /* Glassmorphism gradient background with blur effect */
+  background: linear-gradient(135deg, #001233 0%, #312244 25%, #144552 50%, #49111c 75%, #001233 100%);
+  background-size: 400% 400%;
+  animation: gradientShift 20s ease infinite;
+  position: relative;
   font-family: var(--font-body);
   font-weight: 400;
   color: var(--color-text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Animated gradient background */
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Glassmorphism overlay for depth */
+body::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(ellipse at top, rgba(49, 34, 68, 0.3) 0%, transparent 70%),
+              radial-gradient(ellipse at bottom, rgba(73, 17, 28, 0.3) 0%, transparent 70%);
+  backdrop-filter: blur(100px);
+  -webkit-backdrop-filter: blur(100px);
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Additional glass layer for more depth */
+body::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(180deg,
+    rgba(0, 18, 51, 0.2) 0%,
+    rgba(20, 69, 82, 0.1) 50%,
+    rgba(49, 34, 68, 0.2) 100%);
+  z-index: 2;
+  pointer-events: none;
 }
 
 #game-container {
@@ -46,13 +89,15 @@ body {
   justify-content: center;
   align-items: center;
   position: relative;
-  z-index: 10; /* Higher z-index for game container */
+  z-index: 10; /* Higher z-index for game container above glassmorphism layers */
+  background: transparent; /* Ensure container is transparent */
 }
 
-/* Ensure Phaser canvas is visible */
+/* Ensure Phaser canvas is visible and transparent */
 #game-container canvas {
   position: relative;
   z-index: 5;
+  background: transparent !important; /* Force transparent background */
 }
 
 /* Prevent text selection and touch callouts */

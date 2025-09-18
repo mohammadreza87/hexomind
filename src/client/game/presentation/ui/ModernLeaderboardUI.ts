@@ -6,6 +6,7 @@ import {
   type LeaderboardViewEntry,
   type LeaderboardViewPeriod,
 } from '../../../services/LeaderboardService';
+import { logger } from '../../../../utils/logger';
 
 type LeaderboardType = LeaderboardViewPeriod;
 
@@ -470,12 +471,12 @@ export class ModernLeaderboardUI extends UIComponent {
       try {
         entries = await leaderboardService.fetchLeaderboard(type, limit, currentUsername);
       } catch (fetchError) {
-        console.warn('Failed to fetch leaderboard from server:', fetchError);
+        logger.warn('Failed to fetch leaderboard from server:', fetchError);
       }
 
       // If no server data, use client-side dummy data
       if (entries.length === 0) {
-        console.log('Using client-side dummy data for leaderboard');
+        logger.info('Using client-side dummy data for leaderboard');
         entries = this.generateDummyData(type, currentUsername);
         leaderboardService.primeCache(type, entries);
       }

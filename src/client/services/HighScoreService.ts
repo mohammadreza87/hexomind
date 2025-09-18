@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger';
 import { leaderboardService } from './LeaderboardService';
 
 /**
@@ -115,7 +116,7 @@ export class HighScoreService {
           if (daysSinceSet < 30) {
             this.customUsername = data.username;
             this.username = this.customUsername;
-            console.log('Using custom username:', this.customUsername);
+            logger.debug('Using custom username:', this.customUsername);
             return;
           }
 
@@ -166,14 +167,14 @@ export class HighScoreService {
       const response = await fetch('/api/current-user', this.withClientHeaders());
       if (response.ok) {
         const data = await response.json();
-        console.log('Current user data from server:', data);
+        logger.debug('Current user data from server:', data);
 
         if (data.username) {
           this.redditUsername = data.username;
           if (!this.customUsername) {
             this.username = this.redditUsername;
             localStorage.setItem('hexomind_username', this.username);
-            console.log('Using Reddit username:', this.redditUsername);
+            logger.debug('Using Reddit username:', this.redditUsername);
           }
         }
       }
@@ -186,7 +187,7 @@ export class HighScoreService {
       if (localCustom) {
         this.customUsername = localCustom;
         resolvedUsername = localCustom;
-        console.log('Using custom username from local storage:', this.customUsername);
+        logger.debug('Using custom username from local storage:', this.customUsername);
       }
     }
 
@@ -209,7 +210,7 @@ export class HighScoreService {
       }
     }
 
-    console.log('Final username:', this.username);
+    logger.debug('Final username:', this.username);
   }
 
   private readCustomUsernameFromLocal(): string | null {
@@ -262,6 +263,16 @@ export class HighScoreService {
       this.lastSync = Date.now();
     } catch (error) {
       console.error('Error saving cached score:', error);
+    }
+  }
+
+  clearCachedScore(): void {
+    this.cachedHighScore = 0;
+    this.lastSync = 0;
+    try {
+      localStorage.removeItem('hexomind_highscore');
+    } catch (error) {
+      logger.warn('Unable to clear cached high score:', error);
     }
   }
 
@@ -365,7 +376,7 @@ export class HighScoreService {
       }));
       localStorage.setItem('hexomind_username', this.customUsername);
 
-      console.log('Custom username saved on server:', this.customUsername);
+      logger.debug('Custom username saved on server:', this.customUsername);
       return { success: true, offlineFallback: false };
     } catch (error) {
       console.error('Error saving custom username to server:', error);
@@ -397,7 +408,7 @@ export class HighScoreService {
     if (this.username) {
       localStorage.setItem('hexomind_username', this.username);
     }
-    console.log('Reverted to username:', this.username);
+    logger.debug('Reverted to username:', this.username);
   }
 
   /**
@@ -471,7 +482,7 @@ export class HighScoreService {
       }
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
-        console.warn('Score submission timed out, saving locally');
+        logger.warn('Score submission timed out, saving locally');
       } else {
         console.error('Error submitting score:', error);
       }

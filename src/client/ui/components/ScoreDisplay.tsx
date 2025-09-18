@@ -35,7 +35,7 @@ export const ScoreDisplay: React.FC<ScoreDisplayProps> = ({ score, highScore }) 
         {/* High Score */}
         <div className="pt-3 border-t border-white/10">
           <div className="text-xs text-white/50">BEST</div>
-          <div className="text-lg font-semibold text-white/80">
+          <div className="text-sm font-semibold text-white/80">
             {highScore.toLocaleString()}
           </div>
         </div>

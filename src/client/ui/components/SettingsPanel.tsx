@@ -6,8 +6,10 @@ import { useGameStore } from '../store/gameStore';
 
 export const SettingsPanel: React.FC = () => {
   const { toggleSettings, setShowLeaderboard } = useUIStore();
-  const { resetGame } = useGameStore();
+  const resetGame = useGameStore((state) => state.resetGame);
+  const setHighScore = useGameStore((state) => state.setHighScore);
   const [username, setUsername] = useState('');
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   useEffect(() => {
     // Load saved username
@@ -51,7 +53,18 @@ export const SettingsPanel: React.FC = () => {
     );
   }, []);
 
-  const handleClose = (afterClose?: () => void) => {
+  const handleClose = (
+    eventOrCallback?: React.MouseEvent<HTMLElement> | (() => void)
+  ) => {
+    let afterClose: (() => void) | undefined;
+
+    if (typeof eventOrCallback === 'function') {
+      afterClose = eventOrCallback;
+    } else if (eventOrCallback) {
+      eventOrCallback.preventDefault();
+      eventOrCallback.stopPropagation();
+    }
+
     // Animate out before closing
     gsap.to('.settings-panel', {
       scale: 0.9,
@@ -128,29 +141,57 @@ export const SettingsPanel: React.FC = () => {
   };
 
   const handleReset = () => {
-    if (confirm('Are you sure you want to reset all game data? This cannot be undone.')) {
-      // Clear all local storage
-      localStorage.removeItem('hexomind_gamestate');
-      localStorage.removeItem('hexomind_highscore');
-      localStorage.removeItem('hexomind_custom_username');
-      localStorage.removeItem('hexomind_username');
+    setShowResetConfirm(true);
+  };
 
-      // Reset game in Phaser
-      if (window.game) {
-        const scene = window.game.scene.getScene('MainScene');
-        if (scene && typeof scene.startNewGame === 'function') {
-          scene.startNewGame();
-        }
+  const confirmReset = async () => {
+    // Clear local persistence first
+    localStorage.removeItem('hexomind_gamestate');
+    localStorage.removeItem('hexomind_highscore');
+    localStorage.removeItem('hexomind_custom_username');
+    localStorage.removeItem('hexomind_username');
+
+    // Attempt server-side reset
+    try {
+      await highScoreService.awaitReady();
+      const username = await highScoreService.getUsername();
+      const response = await fetch('/api/highscore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, reset: true })
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error || 'Server rejected reset request');
       }
-
-      // Reset UI stores
-      if (window.gameStore) {
-        window.gameStore.getState().resetGame();
-      }
-
-      // Close settings panel
-      handleClose();
+    } catch (error) {
+      console.error('Failed to reset server score:', error);
     }
+
+    highScoreService.clearCachedScore();
+
+    // Reset client state
+    setHighScore(0);
+    resetGame();
+
+    const scene = window.game?.scene.getScene('MainScene') as any;
+    if (scene) {
+      if (typeof scene.resetHighScoreData === 'function') {
+        scene.resetHighScoreData();
+      }
+      if (typeof scene.startNewGame === 'function') {
+        scene.startNewGame();
+      }
+    }
+
+    setUsername('');
+    setShowResetConfirm(false);
+    handleClose();
+  };
+
+  const cancelReset = () => {
+    setShowResetConfirm(false);
   };
 
   return (
@@ -158,11 +199,11 @@ export const SettingsPanel: React.FC = () => {
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={handleClose}
+        onClick={(event) => handleClose(event)}
       />
 
       {/* Panel with stronger glassmorphism */}
-      <div className="settings-panel relative w-full max-w-xs">
+      <div className="settings-panel relative w-full max-w-md">
         {/* Glass panel with gradient background */}
         <div className="relative rounded-2xl">
           {/* Glassmorphism layer */}
@@ -175,7 +216,7 @@ export const SettingsPanel: React.FC = () => {
                }}>
             {/* Close button */}
             <button
-              onClick={handleClose}
+              onClick={(event) => handleClose(event)}
               className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors z-10"
             >
               <svg className="w-4 h-4 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -275,6 +316,77 @@ export const SettingsPanel: React.FC = () => {
         <div className="absolute -top-8 -left-8 w-16 h-16 bg-purple-500/20 rounded-full blur-2xl" />
         <div className="absolute -bottom-8 -right-8 w-16 h-16 bg-cyan-500/20 rounded-full blur-2xl" />
       </div>
+
+      {/* Reset Confirmation Modal - Improved Styling */}
+      {showResetConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 pointer-events-auto">
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={cancelReset} />
+          <div
+            className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-white/15 shadow-2xl"
+            style={{
+              backdropFilter: 'blur(22px) saturate(140%)',
+              WebkitBackdropFilter: 'blur(22px) saturate(140%)',
+              background: 'linear-gradient(145deg, rgba(30, 33, 62, 0.88) 0%, rgba(64, 30, 48, 0.88) 100%)'
+            }}
+          >
+            <div className="absolute inset-0 bg-gradient-to-br from-red-500/15 via-purple-500/10 to-orange-500/15" />
+            <div className="relative flex flex-col gap-8 p-6 sm:p-10">
+              <div className="flex flex-col items-center gap-4 text-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-red-500/20 to-orange-500/20 text-3xl">
+                  ⚠️
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-red-300 via-orange-300 to-yellow-300 bg-clip-text text-transparent">
+                    Reset All Data?
+                  </h3>
+                  <p className="text-sm text-white/70">
+                    Everything tied to your current run will be permanently cleared.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {[{
+                  label: 'Current game progress'
+                }, {
+                  label: 'Local high score history'
+                }, {
+                  label: 'Saved usernames'
+                }, {
+                  label: 'Leaderboard standings'
+                }].map(item => (
+                  <div
+                    key={item.label}
+                    className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/80"
+                  >
+                    <span className="text-red-300 text-lg">✖</span>
+                    <span>{item.label}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="rounded-2xl border border-orange-500/40 bg-orange-500/10 px-4 py-3 text-center text-xs font-semibold uppercase tracking-[0.2em] text-orange-200">
+                This action cannot be undone
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <button
+                  onClick={cancelReset}
+                  className="flex-1 rounded-xl border border-white/15 bg-white/10 px-6 py-3 text-sm font-semibold text-white/80 transition-all duration-200 hover:bg-white/20 hover:text-white"
+                >
+                  Keep My Data
+                </button>
+                <button
+                  onClick={confirmReset}
+                  className="flex-1 rounded-xl bg-gradient-to-r from-red-500 via-orange-500 to-amber-500 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-red-500/30 transition-all duration-200 hover:scale-[1.02] hover:shadow-red-500/40"
+                >
+                  Reset Everything
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

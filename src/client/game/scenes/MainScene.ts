@@ -10,6 +10,7 @@ import { PuzzleValidator } from '../core/services/PuzzleValidator';
 import { GameOverService } from '../core/services/GameOverService';
 import { RenderConfig } from '../config/RenderConfig';
 import { errorBoundary } from '../../utils/ErrorBoundary';
+import { logger } from '../../utils/logger';
 import { highScoreService } from '../../services/HighScoreService';
 import { SharpText } from '../utils/SharpText';
 import { DS } from '../config/DesignSystem';
@@ -17,6 +18,7 @@ import { createGradientText } from '../presentation/ui/GradientText';
 import { GameStateManager } from '../services/GameStateManager';
 import { ResponsiveMetrics, measureResponsiveViewport } from '../responsive';
 import { gameBridge } from '../../ui/GameBridge';
+import { shareService } from '../../services/ShareService';
 // Asset URLs (bundled by Vite) - commented out for now since SVG not available
 // import hexSvgUrl from '../../assets/images/hex.svg';
 
@@ -49,6 +51,9 @@ export class MainScene extends Phaser.Scene {
   // Debounce game-over checks and avoid racing with tray spawn
   private gameOverCheckTimer: Phaser.Time.TimerEvent | null = null;
   private isSpawningSet: boolean = false;
+  private consecutiveClears: number = 0; // Track consecutive line clears (increases with each clear)
+  private nonClearingPlacements: number = 0; // Track pieces placed without clearing lines
+  private comboResetTimer: Phaser.Time.TimerEvent | null = null;
 
   constructor() {
     super({ key: 'MainScene' });
@@ -57,7 +62,7 @@ export class MainScene extends Phaser.Scene {
   preload(): void {
     // Setup error recovery for asset loading
     errorBoundary.registerRecoveryStrategy('assets', () => {
-      console.log('Attempting to use fallback rendering');
+      logger.debug('Attempting to use fallback rendering');
       // Could switch to programmatic rendering here
     });
 
@@ -82,11 +87,11 @@ export class MainScene extends Phaser.Scene {
 
       // Show loading progress
       this.load.on('progress', (value: number) => {
-        console.log('Loading:', Math.round(value * 100) + '%');
+        logger.debug('Loading:', Math.round(value * 100) + '%');
       });
 
       this.load.on('complete', () => {
-        console.log('Assets loaded successfully');
+        logger.debug('Assets loaded successfully');
       });
     } else if (RenderConfig.USE_SVG_HEXAGONS) {
       // Load SVG assets with high resolution for crisp rendering
@@ -94,10 +99,10 @@ export class MainScene extends Phaser.Scene {
       this.load.svg(RenderConfig.TEXTURE_KEYS.HEX_FILL, '/assets/hex-fill.svg', { width: 512, height: 512 });
 
       this.load.on('progress', (value: number) => {
-        console.log('Loading SVG:', Math.round(value * 100) + '%');
+        logger.debug('Loading SVG:', Math.round(value * 100) + '%');
       });
       this.load.on('complete', () => {
-        console.log('SVG assets loaded');
+        logger.debug('SVG assets loaded');
       });
     } else {
       // Using programmatic graphics
@@ -305,7 +310,7 @@ export class MainScene extends Phaser.Scene {
 
     // Tray empty event - generate new pieces when all 3 are used
     this.events.on('tray:empty', () => {
-      console.log('All pieces used - generating new set');
+      logger.debug('All pieces used - generating new set');
       this.generateNewPieces();
     });
   }
@@ -314,9 +319,22 @@ export class MainScene extends Phaser.Scene {
    * Start a new game (also called from React)
    */
   public startNewGame(): void {
+    // Reset game over state before starting fresh
+    if (this.gameOverCheckTimer) {
+      this.gameOverCheckTimer.remove(false);
+      this.gameOverCheckTimer = null;
+    }
+    this.hasShownGameOver = false;
+    this.isSpawningSet = false;
+
+    const store = window.gameStore?.getState();
+    store?.setShowNoSpaceToast(false);
+
     // Reset score and move count
     this.score = 0;
     this.moveCount = 0;
+    this.consecutiveClears = 0;
+    this.nonClearingPlacements = 0;
     this.updateScore(0);
 
     // Clear board model
@@ -328,9 +346,24 @@ export class MainScene extends Phaser.Scene {
     // Clear saved game state
     GameStateManager.clearGameState();
 
+    // Refresh high score from server and local sources for each new launch
+    void this.loadHighScore();
+
     // Generate initial pieces
     this.generateNewPieces();
 
+  }
+
+  /**
+   * Reset high score state (used when user clears data)
+   */
+  public resetHighScoreData(): void {
+    this.highScore = 0;
+    if (this.highScoreText) {
+      this.highScoreText.setText('Best: 0');
+    }
+    gameBridge.updateHighScore(0);
+    this.saveHighScore();
   }
 
   /**
@@ -341,7 +374,7 @@ export class MainScene extends Phaser.Scene {
     if (!savedGame) return false;
 
     try {
-      console.log('Restoring saved game...');
+      logger.debug('Restoring saved game...');
 
       // Restore grid state
       const grid = this.boardRenderer.getGridModel();
@@ -371,7 +404,9 @@ export class MainScene extends Phaser.Scene {
       // Restore pieces
       this.pieceTray.restorePieces(savedGame.pieces);
 
-      console.log(`Game restored: Score ${this.score}, ${savedGame.grid.length} cells, ${savedGame.pieces.filter(p => !p.used).length} pieces remaining`);
+      logger.debug(
+        `Game restored: Score ${this.score}, ${savedGame.grid.length} cells, ${savedGame.pieces.filter(p => !p.used).length} pieces remaining`
+      );
 
       // Game restored - no toast needed
 
@@ -415,12 +450,14 @@ export class MainScene extends Phaser.Scene {
     const grid = this.boardRenderer.getGridModel();
     const emptyCells = grid.getEmptyCells().length;
 
-    console.log('=== Generating New Pieces ===');
-    console.log(`Empty cells: ${emptyCells}, Grid fullness: ${(grid.getFullnessPercentage() * 100).toFixed(1)}%`);
+    logger.debug('=== Generating New Pieces ===');
+    logger.debug(
+      `Empty cells: ${emptyCells}, Grid fullness: ${(grid.getFullnessPercentage() * 100).toFixed(1)}%`
+    );
 
     // Check if grid is completely full first
     if (emptyCells === 0) {
-      console.log('Grid is completely full - GAME OVER');
+      logger.debug('Grid is completely full - GAME OVER');
       this.showGameOver();
       return;
     }
@@ -457,7 +494,7 @@ export class MainScene extends Phaser.Scene {
       this.currentPieces = this.pieceGenerator.generateLineClearSet(grid);
     }
 
-    console.log('✓ All 3 pieces can be placed');
+    logger.debug('✓ All 3 pieces can be placed');
     const summary = this.gameOverService.getPlacementSummary(this.currentPieces, grid);
     console.table(summary);
 
@@ -498,9 +535,9 @@ export class MainScene extends Phaser.Scene {
     // Only game over if no immediate move AND the remaining set is not solvable
     if (!anyPieceCanBePlaced && !roundSolvable) {
       const emptyCells = grid.getEmptyCells().length;
-      console.log('=== GAME OVER - No pieces can be placed and set is unsolvable ===');
-      console.log(`Remaining pieces: ${remaining.length}`);
-      console.log(`Empty cells: ${emptyCells}`);
+      logger.debug('=== GAME OVER - No pieces can be placed and set is unsolvable ===');
+      logger.debug(`Remaining pieces: ${remaining.length}`);
+      logger.debug(`Empty cells: ${emptyCells}`);
       const summary = this.gameOverService.getPlacementSummary(remaining, grid);
       console.table(summary);
       this.showGameOver();
@@ -516,16 +553,148 @@ export class MainScene extends Phaser.Scene {
 
     // Clear saved game state immediately so restarting gives a fresh game
     GameStateManager.clearGameState();
-    console.log('Game over - cleared saved game state');
+    logger.debug('Game over - cleared saved game state');
 
     // Show "No More Space" toast first, then reveal panel with more delay
     if (window.gameStore) {
       window.gameStore.getState().setShowNoSpaceToast(true);
       this.time.delayedCall(1800, () => {
-        window.gameStore?.getState().setGameState('gameOver');
-        window.gameStore?.getState().setScore(this.score);
-        window.gameStore?.getState().setHighScore(this.highScore);
+        void this.resolveGameOverFlow();
       });
+    }
+  }
+
+  private async resolveGameOverFlow(): Promise<void> {
+    const store = window.gameStore?.getState();
+    if (!store) {
+      return;
+    }
+
+    store.setScore(this.score);
+    store.setHighScore(this.highScore);
+
+    const offeredRescue = await this.maybeOfferShareRescue();
+    if (!offeredRescue) {
+      store.setGameState('gameOver');
+    }
+  }
+
+  private captureGameScreenshot(): string | null {
+    const canvas = this.game?.canvas as HTMLCanvasElement | undefined;
+    if (!canvas || canvas.width === 0 || canvas.height === 0) {
+      return null;
+    }
+
+    try {
+      const maxWidth = 720;
+      const scale = canvas.width > maxWidth ? maxWidth / canvas.width : 1;
+      const targetWidth = Math.round(canvas.width * scale);
+      const targetHeight = Math.round(canvas.height * scale);
+
+      const outputCanvas = document.createElement('canvas');
+      outputCanvas.width = targetWidth;
+      outputCanvas.height = targetHeight;
+      const context = outputCanvas.getContext('2d');
+      if (!context) {
+        return null;
+      }
+
+      context.drawImage(canvas, 0, 0, targetWidth, targetHeight);
+      return outputCanvas.toDataURL('image/jpeg', 0.85);
+    } catch (error) {
+      console.error('Failed to capture game screenshot:', error);
+      return null;
+    }
+  }
+
+  private async maybeOfferShareRescue(): Promise<boolean> {
+    if (this.score < 2000) {
+      return false;
+    }
+
+    try {
+      await highScoreService.awaitReady();
+      const username = await highScoreService.getUsername();
+
+      if (shareService.hasShownPromptToday(username)) {
+        logger.debug('Share prompt already shown today for', username);
+        return false;
+      }
+
+      const status = await shareService.getStatus(username, { force: true });
+      window.gameStore?.getState().setShareStatus(status);
+
+      if (status.sharedToday) {
+        logger.debug('User already shared today, skipping rescue prompt');
+        return false;
+      }
+
+      const screenshot = this.captureGameScreenshot();
+      window.gameStore?.getState().setShareRescueOffer({
+        score: this.score,
+        highScore: this.highScore,
+        screenshot,
+        username,
+      });
+      shareService.markPromptShown(username);
+      window.gameStore?.getState().setGameState('sharePrompt');
+      return true;
+    } catch (error) {
+      console.error('Failed to evaluate share rescue eligibility:', error);
+      return false;
+    }
+  }
+
+  public continueAfterShareRescue(): void {
+    const store = window.gameStore?.getState();
+    store?.setShowNoSpaceToast(false);
+    store?.setShareRescueOffer(null);
+    store?.setGameState('playing');
+
+    const grid = this.boardRenderer.getGridModel();
+    const rescuePieces = this.pieceGenerator.generateLineClearSet(grid);
+    this.currentPieces = rescuePieces;
+    this.pieceTray.clear();
+    this.pieceTray.setPieces(rescuePieces);
+
+    if (this.gameOverCheckTimer) {
+      this.gameOverCheckTimer.remove(false);
+      this.gameOverCheckTimer = null;
+    }
+
+    this.isSpawningSet = false;
+    this.hasShownGameOver = false;
+
+    // Re-run validity checks next tick to ensure gameplay resumes smoothly
+    this.time.delayedCall(0, () => {
+      this.checkRemainingPiecesValidity();
+    });
+  }
+
+  public async triggerShareRescueTest(): Promise<void> {
+    try {
+      await highScoreService.awaitReady();
+      const username = await highScoreService.getUsername();
+      const store = window.gameStore?.getState();
+      if (!store) {
+        return;
+      }
+
+      const status = await shareService.getStatus(username, { force: true });
+      store.setShareStatus(status);
+
+      const screenshot = this.captureGameScreenshot();
+      store.setShareRescueOffer({
+        score: this.score,
+        highScore: this.highScore,
+        screenshot,
+        username,
+      });
+
+      store.setShowNoSpaceToast(false);
+      store.setGameState('sharePrompt');
+    } catch (error) {
+      console.error('Failed to trigger share rescue test:', error);
     }
   }
 
@@ -533,7 +702,7 @@ export class MainScene extends Phaser.Scene {
    * Reset the game for a new play
    */
   private resetGame(): void {
-    console.log('Resetting game...');
+    logger.debug('Resetting game...');
 
     // Clear any saved game state to ensure fresh start
     GameStateManager.clearGameState();
@@ -541,6 +710,8 @@ export class MainScene extends Phaser.Scene {
     // Reset scores and move count
     this.score = 0;
     this.moveCount = 0;
+    this.consecutiveClears = 0;
+    this.nonClearingPlacements = 0;
     this.scoreText.setText(`Score: ${this.score.toLocaleString()}`);
 
     // Clear the board
@@ -554,7 +725,7 @@ export class MainScene extends Phaser.Scene {
 
     // Generate new pieces after a small delay to ensure everything is cleared
     this.time.delayedCall(100, () => {
-      console.log('Generating new pieces...');
+      logger.debug('Generating new pieces...');
       this.generateNewPieces();
     });
     this.hasShownGameOver = false;
@@ -669,6 +840,20 @@ export class MainScene extends Phaser.Scene {
       // happens after line clear completes inside handleLineCompletion.
       this.handleLineCompletion(lines);
     } else {
+      // No lines cleared - increment non-clearing placements
+      this.nonClearingPlacements++;
+
+      // Break combo only after 3 non-clearing placements
+      if (this.nonClearingPlacements >= 3 && this.consecutiveClears > 0) {
+        this.consecutiveClears = 0;
+        this.nonClearingPlacements = 0;
+        gameBridge.updateCombo(0);
+        if (this.comboResetTimer) {
+          this.comboResetTimer.destroy();
+          this.comboResetTimer = null;
+        }
+      }
+
       // No lines to clear – re-evaluate remaining pieces immediately.
       if (this.gameOverCheckTimer) this.gameOverCheckTimer.remove(false);
       this.gameOverCheckTimer = this.time.delayedCall(0, () => {
@@ -730,21 +915,41 @@ export class MainScene extends Phaser.Scene {
   private async handleLineCompletion(lines: any[]): Promise<void> {
     const grid = this.boardRenderer.getGridModel();
 
-    // Calculate points
-    const basePoints = 100 * lines.length;
-    const comboMultiplier = lines.length > 1 ? lines.length : 1;
-    const totalPoints = basePoints * comboMultiplier;
+    // Increment consecutive clears count
+    this.consecutiveClears++;
 
-    // Update combo in React UI
-    gameBridge.updateCombo(lines.length);
+    // Reset non-clearing placements since we cleared lines
+    this.nonClearingPlacements = 0;
+
+    // Calculate base points
+    const basePoints = 100 * lines.length;
+    let totalPoints = basePoints;
+
+    // Combo system: starts at 3rd consecutive clear
+    if (this.consecutiveClears >= 3) {
+      // Combo starts from 3rd clear: combo 1 at 3 clears, combo 2 at 4 clears, etc.
+      const comboLevel = this.consecutiveClears - 2; // 3 clears = combo 1, 4 = combo 2, etc.
+      const comboBonus = 1 + (0.1 * (comboLevel - 1)); // combo 1 = 1.0x, combo 2 = 1.1x, combo 3 = 1.2x
+      totalPoints = Math.round(basePoints * comboBonus);
+
+      // Show combo popup (starts from X1 at 3rd clear)
+      this.createComboPopup(comboLevel, totalPoints);
+
+      // Update combo in React UI
+      gameBridge.updateCombo(comboLevel);
+    } else {
+      // No combo yet, just regular points
+      gameBridge.updateCombo(0);
+    }
 
     // Update score
     this.updateScore(totalPoints);
 
-    // Clear combo after a delay
-    this.time.delayedCall(2000, () => {
-      gameBridge.updateCombo(0);
-    });
+    // Cancel any existing reset timer
+    if (this.comboResetTimer) {
+      this.comboResetTimer.destroy();
+      this.comboResetTimer = null;
+    }
 
     // Camera shake disabled
     // const shakeIntensity = 0.003 + (lines.length * 0.002);
@@ -770,9 +975,86 @@ export class MainScene extends Phaser.Scene {
   }
 
   /**
+   * Create combo popup with random gradient colors
+   */
+  private createComboPopup(combo: number, points: number): void {
+    // Random color pairs for gradient
+    const colorPairs = [
+      [0xFF00FF, 0x00FFFF], // Magenta to Cyan
+      [0xFF0080, 0xFFD700], // Pink to Gold
+      [0x00FF00, 0x00FFFF], // Green to Cyan
+      [0xFF4500, 0xFFFF00], // Orange to Yellow
+      [0x9400D3, 0x4B0082], // Violet to Indigo
+      [0xFF1493, 0xFF69B4], // Deep Pink to Hot Pink
+      [0x00CED1, 0x48D1CC], // Dark Turquoise to Medium Turquoise
+      [0xFF6347, 0xFFA500], // Tomato to Orange
+      [0x7FFF00, 0x32CD32], // Chartreuse to Lime Green
+      [0xDC143C, 0xFF0000], // Crimson to Red
+    ];
+
+    const randomPair = colorPairs[Math.floor(Math.random() * colorPairs.length)];
+
+    // Get center of screen
+    const centerX = this.cameras.main.width / 2;
+    const centerY = this.cameras.main.height / 2;
+
+    // Create main text
+    const comboText = this.add.text(centerX, centerY - 50, `COMBO X${combo}`, {
+      fontSize: '72px',
+      fontFamily: 'Arial Black',
+      fontStyle: 'bold',
+      stroke: '#000000',
+      strokeThickness: 6
+    });
+    comboText.setOrigin(0.5);
+    comboText.setDepth(1000);
+
+    // Apply gradient effect using tint
+    const gradient = comboText.setTint(randomPair[0], randomPair[0], randomPair[1], randomPair[1]);
+
+    // Add points text below
+    const pointsText = this.add.text(centerX, centerY + 10, `+${points}`, {
+      fontSize: '36px',
+      fontFamily: 'Arial',
+      fontStyle: 'bold',
+      fill: '#FFFFFF',
+      stroke: '#000000',
+      strokeThickness: 4
+    });
+    pointsText.setOrigin(0.5);
+    pointsText.setDepth(1000);
+
+    // Animate combo text - scale up and fade out
+    this.tweens.add({
+      targets: [comboText, pointsText],
+      scaleX: 1.5,
+      scaleY: 1.5,
+      alpha: 0,
+      y: '-=100',
+      duration: 1500,
+      ease: 'Power2',
+      onComplete: () => {
+        comboText.destroy();
+        pointsText.destroy();
+      }
+    });
+
+    // Initial punch effect
+    this.tweens.add({
+      targets: [comboText, pointsText],
+      scaleX: 1.2,
+      scaleY: 1.2,
+      duration: 100,
+      yoyo: true,
+      ease: 'Power2'
+    });
+  }
+
+  /**
    * Update score
    */
   private async updateScore(points: number): Promise<void> {
+    const previousHighScore = this.highScore;
     this.score += points;
     this.scoreText.setText(`Score: ${this.score.toLocaleString()}`);
 
@@ -787,11 +1069,40 @@ export class MainScene extends Phaser.Scene {
       // Update React UI
       gameBridge.updateHighScore(this.highScore);
 
+      // Celebrate new personal record once per run
+      if (false) {
+
+        const delta = Math.max(0, this.highScore - previousHighScore);
+        const screenshot = this.captureGameScreenshot();
+        let username: string | null = null;
+
+        try {
+          username = await highScoreService.getUsername();
+        } catch (error) {
+          console.error('Failed to resolve username for high score celebration:', error);
+        }
+
+        const payload = {
+          newHighScore: this.highScore,
+          previousHighScore,
+          delta,
+          screenshot,
+          username: username ?? 'Hexomind Player'
+        };
+
+        this.time.delayedCall(0, () => {
+          if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+            window.dispatchEvent(new CustomEvent('hexomind:newHighScore', { detail: payload }));
+          } else {
+                  }
+        });
+      }
+
       // Submit to Reddit KV storage
       try {
         const result = await highScoreService.submitScore(this.score);
         if (result.updated && result.rank) {
-          console.log(`New high score! Rank: #${result.rank}`);
+          logger.debug(`New high score! Rank: #${result.rank}`);
           // Could show rank in UI
         }
       } catch (error) {
@@ -888,6 +1199,7 @@ export class MainScene extends Phaser.Scene {
     // Set the best score from all sources
     this.highScore = bestScore;
     this.highScoreText.setText(`Best: ${this.highScore.toLocaleString()}`);
+    gameBridge.updateHighScore(this.highScore);
 
     // Save it back to ensure consistency
     if (this.highScore > 0) {

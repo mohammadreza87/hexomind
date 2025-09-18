@@ -30,7 +30,7 @@ export class GameBridge {
     useGameStore.getState().setCombo(combo);
   }
 
-  setGameState(state: 'idle' | 'playing' | 'paused' | 'gameOver'): void {
+  setGameState(state: 'idle' | 'playing' | 'paused' | 'gameOver' | 'sharePrompt'): void {
     useGameStore.getState().setGameState(state);
   }
 

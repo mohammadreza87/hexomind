@@ -1,7 +1,7 @@
 import React from 'react';
 
 interface GameStateIndicatorProps {
-  state: 'idle' | 'playing' | 'paused' | 'gameOver';
+  state: 'idle' | 'playing' | 'paused' | 'gameOver' | 'sharePrompt';
 }
 
 export const GameStateIndicator: React.FC<GameStateIndicatorProps> = ({ state }) => {
@@ -24,6 +24,12 @@ export const GameStateIndicator: React.FC<GameStateIndicatorProps> = ({ state })
           text: 'PLAYING',
           color: 'from-neon-green to-neon-cyan',
           icon: '🎮',
+        };
+      case 'sharePrompt':
+        return {
+          text: 'SHARE BOOST',
+          color: 'from-orange-400 to-pink-500',
+          icon: '🤝',
         };
       default:
         return {

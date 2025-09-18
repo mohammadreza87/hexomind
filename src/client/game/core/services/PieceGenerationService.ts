@@ -1,3 +1,4 @@
+import { logger } from '../../../utils/logger';
 import { PieceModel, PieceShape } from '../models/PieceModel';
 import { GridModel } from '../models/GridModel';
 import { PieceShapes } from './PieceShapes';
@@ -61,12 +62,14 @@ export class PieceGenerationService {
     const gridFullness = grid.getFullnessPercentage();
     const emptyCells = grid.getEmptyCells().length;
 
-    console.log(`Generating pieces for grid at ${(gridFullness * 100).toFixed(1)}% fullness (${emptyCells} empty cells)`);
+    logger.debug(
+      `Generating pieces for grid at ${(gridFullness * 100).toFixed(1)}% fullness (${emptyCells} empty cells)`
+    );
 
     // Strategy based on grid state
     if (emptyCells < 3) {
       // Critical: Grid almost full, can only generate as many pieces as empty cells
-      console.warn(`Only ${emptyCells} empty cells - generating ${emptyCells} single cell pieces`);
+      logger.warn(`Only ${emptyCells} empty cells - generating ${emptyCells} single cell pieces`);
       return this.generateFallbackPieces(emptyCells);
     }
 
@@ -76,7 +79,7 @@ export class PieceGenerationService {
       // CRITICAL: Check that ALL 3 pieces can be placed (in some order)
       // This is the core game mechanic - players must be able to place all pieces
       if (this.puzzleValidator.hasSolution(pieces, grid, false)) {
-        console.log(`✓ Found solvable set after ${attempts + 1} attempts`);
+        logger.debug(`✓ Found solvable set after ${attempts + 1} attempts`);
 
         // Additional validation: At least one piece should be immediately placeable
         // This prevents deadlock situations
@@ -85,12 +88,12 @@ export class PieceGenerationService {
         );
 
         if (hasImmediateMove) {
-          console.log('✓ At least one piece can be placed immediately');
+          logger.debug('✓ At least one piece can be placed immediately');
           // Shuffle return order slightly for variety
           this.shuffleInPlace(pieces);
           return pieces;
         } else {
-          console.warn('No piece can be placed immediately, regenerating...');
+          logger.warn('No piece can be placed immediately, regenerating...');
         }
       }
 
@@ -98,22 +101,22 @@ export class PieceGenerationService {
     }
 
     // Fallback: Generate very small pieces that are guaranteed to fit
-    console.warn(`Could not generate solvable piece set after ${attempts} attempts, using guaranteed fallback`);
+    logger.warn(`Could not generate solvable piece set after ${attempts} attempts, using guaranteed fallback`);
 
     // Try to generate small but varied pieces first
     const fallbackPieces = this.generateSmallPieces(grid, count);
     if (this.puzzleValidator.hasSolution(fallbackPieces, grid, false)) {
-      console.log('Small pieces are solvable');
+      logger.debug('Small pieces are solvable');
       return fallbackPieces;
     }
 
     // Ultimate fallback: single cells (MUST check solvability even for singles!)
-    console.warn('Small pieces not solvable, trying single-cell fallback');
+    logger.warn('Small pieces not solvable, trying single-cell fallback');
     const singleCells = this.generateFallbackPieces(count);
 
     // Even single cells must be validated - if grid has < 3 empty cells, not all can be placed!
     if (this.puzzleValidator.hasSolution(singleCells, grid, false)) {
-      console.log('Single cells are solvable');
+      logger.debug('Single cells are solvable');
       return singleCells;
     }
 
@@ -123,7 +126,7 @@ export class PieceGenerationService {
     if (remainingEmpty > 0) {
       // Generate only as many single cells as there are empty spaces
       const limitedCount = Math.min(count, remainingEmpty);
-      console.log(`Generating only ${limitedCount} single cells (grid has ${remainingEmpty} empty cells)`);
+      logger.debug(`Generating only ${limitedCount} single cells (grid has ${remainingEmpty} empty cells)`);
       return this.generateFallbackPieces(limitedCount);
     }
 
@@ -357,7 +360,7 @@ export class PieceGenerationService {
     const shape = allShapes.find(s => s.id === shapeId);
 
     if (!shape) {
-      console.warn(`Shape with ID ${shapeId} not found`);
+      logger.warn(`Shape with ID ${shapeId} not found`);
       return null;
     }
 

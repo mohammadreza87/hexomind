@@ -1,22 +1,24 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { GameUIOverlay } from './components/GameUIOverlay';
 import { MenuSystem } from './components/MenuSystem';
 import { LeaderboardPanel } from './components/LeaderboardPanel';
 import { SettingsPanel } from './components/SettingsPanel';
 import { GameOverPanel } from './components/GameOverPanel';
+import { ShareRescuePanel } from './components/ShareRescuePanel';
 import { NoSpaceToast } from './components/NoSpaceToast';
 import { LineClearPopup } from './components/LineClearPopup';
-import { GradientBackground } from './components/GradientBackground';
 import { useGameStore } from './store/gameStore';
 import { useUIStore } from './store/uiStore';
 import { ThemeProvider } from './providers/ThemeProvider';
+import { logger } from '../utils/logger';
 
 export const App: React.FC = () => {
-  const { gameState, score, highScore, combo, resetGame, showNoSpaceToast, setShowNoSpaceToast, lineClearPopup, hideLineClearPopup } = useGameStore();
-  const { showMenu, showLeaderboard, showSettings, setShowLeaderboard, setShowMenu } = useUIStore();
+  const { gameState, score, highScore, combo, resetGame, showNoSpaceToast, setShowNoSpaceToast, lineClearPopup, hideLineClearPopup, shareRescueOffer } = useGameStore();
+  const { showMenu, showLeaderboard, showSettings, setShowLeaderboard } = useUIStore();
+
 
   const handleTryAgain = () => {
-    console.log('Try Again clicked!');
+    logger.debug('Try Again clicked!');
     // Reset the game via the game store
     resetGame();
     // Set game state to playing
@@ -25,7 +27,7 @@ export const App: React.FC = () => {
     if (window.game) {
       const scene = window.game.scene.getScene('MainScene');
       if (scene && typeof scene.startNewGame === 'function') {
-        console.log('Calling startNewGame');
+        logger.debug('Calling startNewGame');
         scene.startNewGame();
       } else {
         console.error('MainScene or startNewGame not found');
@@ -41,6 +43,7 @@ export const App: React.FC = () => {
 
   return (
     <ThemeProvider>
+
       {/* Main game UI overlay - always visible during gameplay */}
       <GameUIOverlay
         score={score}
@@ -63,6 +66,11 @@ export const App: React.FC = () => {
         <NoSpaceToast
           onComplete={() => setShowNoSpaceToast(false)}
         />
+      )}
+
+      {/* Share to Continue Panel - offered once per day */}
+      {gameState === 'sharePrompt' && shareRescueOffer && (
+        <ShareRescuePanel />
       )}
 
       {/* Game Over Panel - shown when game ends */}

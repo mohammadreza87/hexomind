@@ -186,7 +186,9 @@ export class BoardRenderer {
     const base = this.scene.add.image(position.x, position.y, RenderConfig.TEXTURE_KEYS.HEX_BASE_SVG).setOrigin(0.5);
     base.setDisplaySize(dim, dim);
     base.setAlpha(0.3); // Set initial alpha for empty cell appearance
-    base.setTint(0x303050); // Darker tint for empty cells
+    // Use theme color instead of hardcoded tint
+    const theme = this.themeProvider.getTheme();
+    base.setTint(theme.cellEmpty);
     // No rotation - images should already be in correct orientation
     const fill = this.scene.add.image(position.x, position.y, RenderConfig.TEXTURE_KEYS.HEX_FILL_SVG).setOrigin(0.5);
     fill.setDisplaySize(dim - 2, dim - 2);
@@ -208,11 +210,8 @@ export class BoardRenderer {
     const rawPoints = this.hexRenderer.getHexPoints(hitSize);
     const shiftedPoints = rawPoints.map(p => new Phaser.Geom.Point(p.x + this.hexSize, p.y + this.hexSize));
 
-    zone.setInteractive(new Phaser.Geom.Polygon(shiftedPoints), Phaser.Geom.Polygon.Contains);
-    // Cursor feedback
-    if (zone.input) {
-      zone.input.cursor = 'pointer';
-    }
+    // Remove interactivity - cells are not clickable
+    // zone.setInteractive(new Phaser.Geom.Polygon(shiftedPoints), Phaser.Geom.Polygon.Contains);
 
     // Store data
     zone.setData('coords', coords);
@@ -228,8 +227,8 @@ export class BoardRenderer {
     this.cellFillImages.set(key, fill);
     this.cellInteractives.set(key, zone);
 
-    // Setup interaction events
-    this.setupCellInteraction(zone, coords);
+    // No interaction events needed - cells are not clickable
+    // this.setupCellInteraction(zone, coords);
   }
 
   /**
@@ -292,11 +291,8 @@ export class BoardRenderer {
     fill.setDisplaySize(dim - 2, dim - 2);
     // No rotation - images should already be in correct orientation for flat-top
 
-    // Base tint (grid) - no alternating colors
-    let bgColor = theme.cellEmpty;
-    if (isHovering && !isOccupied) {
-      bgColor = theme.cellHover;
-    }
+    // Base tint (grid) - no alternating colors, no hover
+    const bgColor = theme.cellEmpty;
     base.setTint(bgColor);
     base.setAlpha(0.3);
 

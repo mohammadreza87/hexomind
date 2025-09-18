@@ -1,4 +1,5 @@
 import express, { type Request } from 'express';
+import { randomUUID } from 'node:crypto';
 import { InitResponse, IncrementResponse, DecrementResponse } from '../shared/types/api';
 import { redis, createServer, context, media } from '@devvit/web/server';
 import { createPost, createChallengePost } from './core/post';
@@ -15,10 +16,12 @@ import {
   updateSubredditLeaderboard,
   getUserRank,
   getGameStatistics,
-  incrementGamesPlayed
+  incrementGamesPlayed,
+  resetUserHighScore
 } from './api/highscores';
 import { initializeLeaderboards, ensurePlayerInLeaderboard } from './api/dummyData';
 import { normalizeLeaderboardEntries } from './utils/leaderboard';
+import { logger } from './utils/logger';
 import type { LeaderboardEntry, LeaderboardPeriod } from '../shared/types/leaderboard';
 
 const USERNAME_RESERVATIONS_KEY = 'hexomind:usernames:reservations';
@@ -58,7 +61,7 @@ function parseJsonRecord<T>(value: string | null): T | null {
   try {
     return JSON.parse(value) as T;
   } catch (error) {
-    console.warn('Failed to parse JSON record:', error);
+    logger.warn('Failed to parse JSON record:', error);
     return null;
   }
 }
@@ -180,6 +183,31 @@ app.use(express.text(bodyParserLimit));
 
 const router = express.Router();
 
+type TransientScreenshot = {
+  buffer: Buffer;
+  mime: string;
+  expiresAt: number;
+};
+
+const transientScreenshots = new Map<string, TransientScreenshot>();
+
+function storeTransientScreenshot(buffer: Buffer, mime: string): string {
+  const id = randomUUID();
+  const expiresAt = Date.now() + 5 * 60 * 1000;
+  transientScreenshots.set(id, { buffer, mime, expiresAt });
+  setTimeout(() => transientScreenshots.delete(id), 5 * 60 * 1000).unref?.();
+  return id;
+}
+
+function getScreenshotUrl(req: Request, id: string): string {
+  const forwardedProto = req.headers['x-forwarded-proto'];
+  const protocol = Array.isArray(forwardedProto)
+    ? forwardedProto[0]
+    : forwardedProto ?? req.protocol;
+  const host = req.get('host');
+  return `${protocol}://${host}/share-screenshot/${id}`;
+}
+
 let leaderboardInitialization: Promise<void> | null = null;
 
 async function ensureLeaderboardsInitializedOnce(): Promise<void> {
@@ -207,7 +235,7 @@ router.get<{ postId: string }, InitResponse | { status: string; message: string 
     const { postId } = context;
 
     // Log all available context properties for debugging
-    console.log('Devvit context:', {
+    logger.debug('Devvit context:', {
       postId: context.postId,
       subredditName: context.subredditName,
       userId: context.userId,
@@ -354,12 +382,25 @@ router.get('/api/highscore/:username/rank', async (req, res): Promise<void> => {
 router.post('/api/highscore', async (req, res): Promise<void> => {
   try {
     const { username } = req.body;
+    const reset = req.body?.reset === true;
+
+    if (!username) {
+      res.status(400).json({ error: 'Username is required' });
+      return;
+    }
+
+    if (reset) {
+      await resetUserHighScore(username);
+      res.json({ updated: true, highScore: 0, rank: null, reset: true });
+      return;
+    }
+
     const score = typeof req.body.score === 'number'
       ? Math.max(0, Math.floor(req.body.score))
       : NaN;
 
-    if (!username || !Number.isFinite(score)) {
-      res.status(400).json({ error: 'Username and score are required' });
+    if (!Number.isFinite(score)) {
+      res.status(400).json({ error: 'Score must be provided for updates' });
       return;
     }
 
@@ -380,10 +421,10 @@ router.post('/api/highscore', async (req, res): Promise<void> => {
 
         // Ensure leaderboard mirrors are updated before responding
         await Promise.all([
-          updateDailyLeaderboard(username, authoritativeScore).catch(err =>
+          updateDailyLeaderboard(username, score).catch(err =>
             console.error('Failed to update daily leaderboard:', err)
           ),
-          updateWeeklyLeaderboard(username, authoritativeScore).catch(err =>
+          updateWeeklyLeaderboard(username, score).catch(err =>
             console.error('Failed to update weekly leaderboard:', err)
           ),
           context.subredditName ?
@@ -436,34 +477,34 @@ router.get('/api/leaderboard', async (req, res): Promise<void> => {
       ? req.query.username.trim()
       : null;
 
-    console.log(`Fetching ${type} leaderboard with limit ${limit}`);
+    logger.debug(`Fetching ${type} leaderboard with limit ${limit}`);
 
     let leaderboard: LeaderboardEntry[] = [];
     if (type === 'daily') {
       const today = date || new Date().toISOString().split('T')[0];
-      console.log(`Fetching daily leaderboard for ${today}`);
+      logger.debug(`Fetching daily leaderboard for ${today}`);
       leaderboard = await getDailyLeaderboard(today, limit, requestedUsername ?? undefined);
     } else if (type === 'weekly') {
-      console.log('Fetching weekly leaderboard');
+      logger.debug('Fetching weekly leaderboard');
       leaderboard = await getWeeklyLeaderboard(limit, requestedUsername ?? undefined);
     } else if (type === 'subreddit' && context.subredditName) {
-      console.log(`Fetching subreddit leaderboard for ${context.subredditName}`);
+      logger.debug(`Fetching subreddit leaderboard for ${context.subredditName}`);
       leaderboard = await getSubredditLeaderboard(context.subredditName, limit);
     } else {
-      console.log('Fetching global leaderboard');
+      logger.debug('Fetching global leaderboard');
       leaderboard = await getGlobalLeaderboard(limit, requestedUsername ?? undefined);
     }
 
     leaderboard = normalizeLeaderboardEntries(leaderboard);
 
-    console.log(`Leaderboard result: ${leaderboard.length} entries`);
+    logger.debug(`Leaderboard result: ${leaderboard.length} entries`);
     if (leaderboard.length > 0) {
-      console.log('First entry:', leaderboard[0]);
+      logger.debug('First entry:', leaderboard[0]);
     }
 
     // If empty, try to initialize with dummy data
     if (leaderboard.length === 0) {
-      console.log('Leaderboard empty, initializing with dummy data...');
+      logger.debug('Leaderboard empty, initializing with dummy data...');
       await initializeLeaderboards();
       // Retry fetching
       if (type === 'daily') {
@@ -475,7 +516,7 @@ router.get('/api/leaderboard', async (req, res): Promise<void> => {
         leaderboard = await getGlobalLeaderboard(limit, requestedUsername ?? undefined);
       }
       leaderboard = normalizeLeaderboardEntries(leaderboard);
-      console.log(`After initialization: ${leaderboard.length} entries`);
+      logger.debug(`After initialization: ${leaderboard.length} entries`);
     }
 
     res.json({ leaderboard, type });
@@ -691,6 +732,62 @@ router.post('/api/commit-username', async (req, res): Promise<void> => {
  * Share Score Challenge - Viral mechanics for social sharing
  * Creates engaging Reddit posts to drive community challenges
  */
+router.get('/share-screenshot/:id', (req, res): void => {
+  const { id } = req.params;
+  const entry = transientScreenshots.get(id);
+  if (!entry) {
+    res.status(404).end();
+    return;
+  }
+
+  if (entry.expiresAt <= Date.now()) {
+    transientScreenshots.delete(id);
+    res.status(410).end();
+    return;
+  }
+
+  res.setHeader('Content-Type', entry.mime || 'image/jpeg');
+  res.setHeader('Cache-Control', 'private, max-age=300, immutable');
+  res.send(entry.buffer);
+});
+
+router.get('/api/share-status', async (req, res): Promise<void> => {
+  try {
+    const queryUsername = req.query?.username;
+    const username = typeof queryUsername === 'string' ? queryUsername.trim() : null;
+
+    if (!username) {
+      res.status(400).json({ error: 'Username required' });
+      return;
+    }
+
+    if (!context.subredditName) {
+      res.status(400).json({ error: 'Subreddit context unavailable' });
+      return;
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+    const shareKey = `shares:${context.subredditName}:${today}`;
+    const shareCountRaw = await redis.hGet(shareKey, username);
+    const shareCountToday = shareCountRaw ? parseInt(shareCountRaw, 10) || 0 : 0;
+
+    const userStatsKey = `user:${username}:stats`;
+    const userStats = await redis.hGetAll(userStatsKey);
+    const totalShares = parseInt(userStats?.shares || '0', 10) || 0;
+    const lastShareAt = userStats?.last_share_at ? parseInt(userStats.last_share_at, 10) || null : null;
+
+    res.json({
+      sharedToday: shareCountToday > 0,
+      shareCountToday,
+      totalShares,
+      lastShareAt,
+    });
+  } catch (error) {
+    console.error('Error fetching share status:', error);
+    res.status(500).json({ error: 'Failed to load share status' });
+  }
+});
+
 router.post('/api/share-challenge', async (req, res): Promise<void> => {
   try {
     const { score, username, rank, period = 'global', screenshot } = req.body;
@@ -702,20 +799,35 @@ router.post('/api/share-challenge', async (req, res): Promise<void> => {
 
     let screenshotUrl: string | null = null;
 
-    if (typeof screenshot === 'string' && screenshot.startsWith('data:image/')) {
-      if (screenshot.length > 3_000_000) {
-        console.warn('Screenshot payload too large, skipping upload');
+    const host = req.get('host') ?? '';
+    const isLoopbackHost = /(^|,)(localhost|127\.0\.0\.1)(:|$)/i.test(host);
+
+    if (typeof screenshot === 'string' && screenshot.startsWith('data:image/') && !isLoopbackHost) {
+      const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(screenshot);
+      if (!match) {
+        logger.warn('Invalid screenshot data URI');
       } else {
-        try {
-          const upload = await media.upload({
-            url: screenshot,
-            type: 'image'
-          });
-          screenshotUrl = upload.mediaUrl;
-        } catch (uploadError) {
-          console.error('Failed to upload challenge screenshot:', uploadError);
+        const [, mime, base64Data] = match;
+        const maxBytes = 2 * 1024 * 1024; // 2MB cap
+        if (base64Data.length * 0.75 > maxBytes) {
+          logger.warn('Screenshot payload too large, skipping upload');
+        } else {
+          try {
+            const buffer = Buffer.from(base64Data, 'base64');
+            const id = storeTransientScreenshot(buffer, mime);
+            const url = getScreenshotUrl(req, id);
+            const upload = await media.upload({
+              url,
+              type: 'image'
+            });
+            screenshotUrl = upload.mediaUrl;
+          } catch (uploadError) {
+            console.error('Failed to upload challenge screenshot:', uploadError);
+          }
         }
       }
+    } else if (typeof screenshot === 'string' && isLoopbackHost) {
+      logger.warn('Skipping screenshot upload: cannot reach local development host from Reddit infrastructure');
     }
 
     // Viral title generation with psychological triggers
@@ -791,9 +903,11 @@ router.post('/api/share-challenge', async (req, res): Promise<void> => {
     const userStats = await redis.hGetAll(userStatsKey);
     const currentShares = parseInt(userStats?.shares || '0');
     const currentViralScore = parseInt(userStats?.viral_score || '0');
+    const now = Date.now();
     await redis.hSet(userStatsKey, {
       shares: (currentShares + 1).toString(),
-      viral_score: (currentViralScore + Math.floor(score / 100)).toString()
+      viral_score: (currentViralScore + Math.floor(score / 100)).toString(),
+      last_share_at: now.toString()
     });
 
     // Add to trending challenges list
@@ -812,7 +926,8 @@ router.post('/api/share-challenge', async (req, res): Promise<void> => {
       challengeId,
       message: '🔥 Challenge posted! Let the games begin!',
       viralScore: Math.floor(score / 100),
-      screenshotUrl: screenshotUrl ?? null
+      screenshotUrl: screenshotUrl ?? null,
+      lastShareAt: now
     });
 
   } catch (error: any) {
@@ -833,5 +948,5 @@ const port = process.env.WEBBIT_PORT || 3000;
 const server = createServer(app);
 server.on('error', (err) => console.error(`server error; ${err.stack}`));
 server.listen(port, () => {
-  console.log(`http://localhost:${port}`);
+  logger.info(`http://localhost:${port}`);
 });
