@@ -467,6 +467,7 @@ export class MainScene extends Phaser.Scene {
     // Mark spawn complete next tick to avoid mid-spawn checks
     this.time.delayedCall(0, () => {
       this.isSpawningSet = false;
+      this.checkRemainingPiecesValidity();
     });
   }
 
@@ -518,14 +519,15 @@ export class MainScene extends Phaser.Scene {
     GameStateManager.clearGameState();
     console.log('Game over - cleared saved game state');
 
-    // Update React store to show game over panel
+    // Show "No More Space" toast first, then reveal panel with more delay
     if (window.gameStore) {
-      window.gameStore.getState().setGameState('gameOver');
-      window.gameStore.getState().setScore(this.score);
-      window.gameStore.getState().setHighScore(this.highScore);
+      window.gameStore.getState().setShowNoSpaceToast(true);
+      this.time.delayedCall(1800, () => {
+        window.gameStore?.getState().setGameState('gameOver');
+        window.gameStore?.getState().setScore(this.score);
+        window.gameStore?.getState().setHighScore(this.highScore);
+      });
     }
-
-    // No more space - could add simple text notification here if needed
   }
 
   /**
@@ -568,8 +570,12 @@ export class MainScene extends Phaser.Scene {
     // Clear previous preview
     this.clearPreview();
 
-    // Get board position from pointer
-    const boardCoords = this.boardRenderer.pixelToHex(pointer.x, pointer.y);
+    // Account for touch offset when calculating board position
+    const touchOffset = pointer.wasTouch ? -80 : 0;
+    const adjustedY = pointer.y - touchOffset; // Subtract offset to get actual placement position
+
+    // Get board position from adjusted pointer position
+    const boardCoords = this.boardRenderer.pixelToHex(pointer.x, adjustedY);
     if (!boardCoords) return;
 
     // Calculate piece position relative to board
@@ -606,8 +612,12 @@ export class MainScene extends Phaser.Scene {
     return errorBoundary.safeExecute(() => {
       if (!this.draggedPiece) return false;
 
-      // Get board position
-      const boardCoords = this.boardRenderer.pixelToHex(pointer.x, pointer.y);
+      // Account for touch offset when calculating board position
+      const touchOffset = pointer.wasTouch ? -80 : 0;
+      const adjustedY = pointer.y - touchOffset; // Subtract offset to get actual placement position
+
+      // Get board position from adjusted pointer position
+      const boardCoords = this.boardRenderer.pixelToHex(pointer.x, adjustedY);
       if (!boardCoords) return false;
 
       // Check if placement is valid
@@ -818,8 +828,10 @@ export class MainScene extends Phaser.Scene {
    * Show lines cleared effect
    */
   private showLinesClearedEffect(lineCount: number, points: number): void {
-    // Completely disabled - no visual effects at all
-    return;
+    // Show the line clear popup with compliment and score
+    if (window.gameStore) {
+      window.gameStore.getState().showLineClearPopup(lineCount, points);
+    }
   }
 
   /**

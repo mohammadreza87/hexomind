@@ -8,6 +8,8 @@ interface GameStore {
   combo: number;
   level: number;
   moves: number;
+  showNoSpaceToast: boolean;
+  lineClearPopup: { lines: number; score: number } | null;
 
   // Actions
   setGameState: (state: GameStore['gameState']) => void;
@@ -17,6 +19,9 @@ interface GameStore {
   incrementLevel: () => void;
   incrementMoves: () => void;
   resetGame: () => void;
+  setShowNoSpaceToast: (show: boolean) => void;
+  showLineClearPopup: (lines: number, score: number) => void;
+  hideLineClearPopup: () => void;
 }
 
 export const useGameStore = create<GameStore>((set) => ({
@@ -27,6 +32,8 @@ export const useGameStore = create<GameStore>((set) => ({
   combo: 0,
   level: 1,
   moves: 0,
+  showNoSpaceToast: false,
+  lineClearPopup: null,
 
   // Actions
   setGameState: (state) => set({ gameState: state }),
@@ -44,5 +51,10 @@ export const useGameStore = create<GameStore>((set) => ({
     combo: 0,
     level: 1,
     moves: 0,
+    showNoSpaceToast: false,
+    lineClearPopup: null,
   }),
+  setShowNoSpaceToast: (show) => set({ showNoSpaceToast: show }),
+  showLineClearPopup: (lines, score) => set({ lineClearPopup: { lines, score } }),
+  hideLineClearPopup: () => set({ lineClearPopup: null }),
 }));

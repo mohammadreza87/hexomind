@@ -208,9 +208,12 @@ export class PieceTray {
 
     // Dragging
     container.on('drag', (pointer: Phaser.Input.Pointer, dragX: number, dragY: number) => {
-      // Always center the piece on the pointer
+      // Add offset for touch input so piece appears above finger
+      const touchOffset = pointer.wasTouch ? -80 : 0; // 80 pixels above finger for touch
+
+      // Position piece with offset
       container.x = pointer.x;
-      container.y = pointer.y;
+      container.y = pointer.y + touchOffset;
 
       // Emit event for board to show preview
       this.scene.events.emit('piece:drag', piece, pointer);

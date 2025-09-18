@@ -4,12 +4,15 @@ import { MenuSystem } from './components/MenuSystem';
 import { LeaderboardPanel } from './components/LeaderboardPanel';
 import { SettingsPanel } from './components/SettingsPanel';
 import { GameOverPanel } from './components/GameOverPanel';
+import { NoSpaceToast } from './components/NoSpaceToast';
+import { LineClearPopup } from './components/LineClearPopup';
+import { GradientBackground } from './components/GradientBackground';
 import { useGameStore } from './store/gameStore';
 import { useUIStore } from './store/uiStore';
 import { ThemeProvider } from './providers/ThemeProvider';
 
 export const App: React.FC = () => {
-  const { gameState, score, highScore, combo, resetGame } = useGameStore();
+  const { gameState, score, highScore, combo, resetGame, showNoSpaceToast, setShowNoSpaceToast, lineClearPopup, hideLineClearPopup } = useGameStore();
   const { showMenu, showLeaderboard, showSettings, setShowLeaderboard, setShowMenu } = useUIStore();
 
   const handleTryAgain = () => {
@@ -45,6 +48,22 @@ export const App: React.FC = () => {
         combo={combo}
         gameState={gameState}
       />
+
+      {/* Line Clear Popup - shown when clearing lines */}
+      {lineClearPopup && (
+        <LineClearPopup
+          lines={lineClearPopup.lines}
+          score={lineClearPopup.score}
+          onComplete={hideLineClearPopup}
+        />
+      )}
+
+      {/* No More Space Toast - shown before game over */}
+      {showNoSpaceToast && (
+        <NoSpaceToast
+          onComplete={() => setShowNoSpaceToast(false)}
+        />
+      )}
 
       {/* Game Over Panel - shown when game ends */}
       {gameState === 'gameOver' && (

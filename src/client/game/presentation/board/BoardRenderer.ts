@@ -127,17 +127,17 @@ export class BoardRenderer {
 
     // Use 95% of width for the board for much bigger hexagons
     const availableWidth = gameWidth * 0.95;
-    // Use about 45% of height for the board area
-    const availableHeight = gameHeight * 0.45;
+    // Use about 55% of height for the board area (bigger grid)
+    const availableHeight = gameHeight * 0.55;
 
     const sizeByWidth = availableWidth / (1.5 * gridWidth);
     const sizeByHeight = availableHeight / (Math.sqrt(3) * gridHeight);
 
     const baseSize = Math.min(sizeByWidth, sizeByHeight);
 
-    // Significantly increase hex size bounds for much bigger grid
-    const minSize = 70;
-    const maxSize = 90;
+    // Increase hex size bounds for bigger grid
+    const minSize = 80;
+    const maxSize = 100;
 
     this.hexSize = Phaser.Math.Clamp(baseSize, minSize, maxSize);
     this.hexSpacing = this.hexSize * 0.08;
@@ -398,9 +398,9 @@ export class BoardRenderer {
     const gameWidth = 1080;
     const gameHeight = 1920;
 
-    // True center of the game view
+    // Center horizontally, move down vertically to be closer to pieces
     const centerX = gameWidth / 2;
-    const centerY = gameHeight / 2;
+    const centerY = gameHeight / 2 + 80; // Move down by 80 pixels
 
     this.boardContainer.setPosition(centerX, centerY);
   }

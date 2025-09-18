@@ -110,16 +110,34 @@ export class PieceRenderer {
       const relY = pos.y - centerY;
       // Add spacing between piece hexagons (8% like the grid)
       const spacing = this.hexSize * 0.08;
-      const dim = (this.hexSize - spacing) * 2;
-      const img = this.scene.add.image(relX, relY, RenderConfig.TEXTURE_KEYS.HEX_PIECE_GLASS).setOrigin(0.5);
-      img.setDisplaySize(dim, dim);
-      // Apply 30° rotation for correct orientation
-      img.setRotation(Math.PI / 6);
-      img.setTint(pieceColor);
 
-      img.setAlpha(1);
-      this.container.add(img);
-      this.hexagons.push(img);
+      // Create graphics for hexagon shape with glassmorphism
+      const hexGraphics = this.scene.add.graphics();
+
+      // Draw filled hexagon with piece color - flat-top orientation with 30° rotation
+      hexGraphics.fillStyle(pieceColor, 0.85);
+      hexGraphics.lineStyle(1, 0xffffff, 0.125); // Subtle border
+
+      hexGraphics.beginPath();
+      const size = this.hexSize - spacing;
+      for (let i = 0; i < 6; i++) {
+        const angle = (Math.PI / 3) * i; // Flat-top hexagon (starts at 0°)
+        const px = relX + Math.cos(angle) * size;
+        const py = relY + Math.sin(angle) * size;
+        if (i === 0) {
+          hexGraphics.moveTo(px, py);
+        } else {
+          hexGraphics.lineTo(px, py);
+        }
+      }
+      hexGraphics.closePath();
+      hexGraphics.fillPath();
+      hexGraphics.strokePath();
+
+      // Don't add the SVG overlay - it causes the square frame
+      this.container.add(hexGraphics);
+      // Store graphics as hexagons for compatibility
+      this.hexagons.push(hexGraphics as any);
 
       this.cellOffsets.push(new Phaser.Math.Vector2(relX, relY));
     });

@@ -19,7 +19,7 @@ export function initializeReactUI(): void {
   // Create a div for React to mount into
   const reactRoot = document.createElement('div');
   reactRoot.id = 'react-ui-root';
-  reactRoot.className = 'fixed inset-0 pointer-events-none z-10';
+  reactRoot.className = 'fixed inset-0 pointer-events-none z-50'; // Higher z-index for UI overlay
   document.body.appendChild(reactRoot);
 
   // Expose game store globally

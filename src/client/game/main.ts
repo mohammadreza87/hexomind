@@ -42,7 +42,7 @@ const buildGameConfig = (
 ): Phaser.Types.Core.GameConfig => ({
   type: Phaser.WEBGL, // Force WebGL for better performance
   parent,
-  backgroundColor: '#1a1a1b', // Reddit dark mode default
+  backgroundColor: 0x000000, // Pure black background
   resolution,
   scale: {
     mode: Phaser.Scale.NONE, // No scaling, fixed size
@@ -65,7 +65,7 @@ const buildGameConfig = (
     antialiasGL: true, // WebGL antialiasing
     pixelArt: false,
     roundPixels: false, // Don't round pixels - allow smooth positioning
-    transparent: false,
+    transparent: false, // Solid background
     clearBeforeRender: true,
     preserveDrawingBuffer: false,
     premultipliedAlpha: true,
