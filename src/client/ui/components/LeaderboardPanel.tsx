@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { gsap } from 'gsap';
 import { useUIStore } from '../store/uiStore';
 import { leaderboardService } from '../../services/LeaderboardService';
@@ -14,6 +14,43 @@ export const LeaderboardPanel: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [sharing, setSharing] = useState<boolean>(false);
+
+  const captureGameScreenshot = useCallback((): string | null => {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+
+    const phaserGame = window.game;
+    const canvas: HTMLCanvasElement | undefined = phaserGame?.canvas as HTMLCanvasElement | undefined;
+
+    if (!canvas || canvas.width === 0 || canvas.height === 0) {
+      return null;
+    }
+
+    try {
+      const maxWidth = 720;
+      const scale = canvas.width > maxWidth ? maxWidth / canvas.width : 1;
+      const targetWidth = Math.round(canvas.width * scale);
+      const targetHeight = Math.round(canvas.height * scale);
+
+      const outputCanvas = document.createElement('canvas');
+      outputCanvas.width = targetWidth;
+      outputCanvas.height = targetHeight;
+      const context = outputCanvas.getContext('2d');
+
+      if (!context) {
+        return null;
+      }
+
+      context.drawImage(canvas, 0, 0, targetWidth, targetHeight);
+
+      return outputCanvas.toDataURL('image/jpeg', 0.85);
+    } catch (captureError) {
+      console.error('Failed to capture game screenshot:', captureError);
+      return null;
+    }
+  }, []);
 
   useEffect(() => {
     // Animate panel entrance
@@ -276,6 +313,14 @@ export const LeaderboardPanel: React.FC = () => {
                       {/* Viral Share Button */}
                       <button
                         onClick={async () => {
+                          if (sharing) {
+                            return;
+                          }
+
+                          setSharing(true);
+
+                          const screenshot = captureGameScreenshot();
+
                           try {
                             const response = await fetch('/api/share-challenge', {
                               method: 'POST',
@@ -286,7 +331,8 @@ export const LeaderboardPanel: React.FC = () => {
                                 score: mine.score,
                                 username: mine.username,
                                 rank: mine.rank,
-                                period: activeTab
+                                period: activeTab,
+                                screenshot
                               })
                             });
 
@@ -310,9 +356,14 @@ export const LeaderboardPanel: React.FC = () => {
                             }
                           } catch (error) {
                             console.error('Failed to share challenge:', error);
+                          } finally {
+                            setSharing(false);
                           }
                         }}
-                        className="share-challenge-btn w-full py-3 px-4 rounded-xl bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600 text-white font-bold text-sm tracking-wider transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl flex items-center justify-center gap-2 group"
+                        className={`share-challenge-btn w-full py-3 px-4 rounded-xl bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600 text-white font-bold text-sm tracking-wider transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl flex items-center justify-center gap-2 group ${
+                          sharing ? 'opacity-60 cursor-not-allowed hover:scale-100' : ''
+                        }`}
+                        disabled={sharing}
                         style={{
                           position: 'relative',
                           overflow: 'hidden'

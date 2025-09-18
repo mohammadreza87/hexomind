@@ -292,9 +292,8 @@ export class BoardRenderer {
     fill.setDisplaySize(dim - 2, dim - 2);
     // No rotation - images should already be in correct orientation for flat-top
 
-    // Base tint (grid)
-    const isAlt = (coords.q + coords.r) % 2 === 0;
-    let bgColor = isAlt ? theme.cellEmpty : theme.cellEmptyAlt;
+    // Base tint (grid) - no alternating colors
+    let bgColor = theme.cellEmpty;
     if (isHovering && !isOccupied) {
       bgColor = theme.cellHover;
     }

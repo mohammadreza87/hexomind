@@ -51,14 +51,13 @@ export class ColorSystem {
 
     // Modern piece colors - sophisticated gradients
     pieceColors: [
-      '#667eea', // Primary purple
-      '#764ba2', // Deep purple
-      '#f093fb', // Pink
-      '#f5576c', // Coral
-      '#00f260', // Green
-      '#0575e6', // Blue
-      '#f5af19', // Gold
-      '#63a4ff', // Light blue
+      '#e63946', // Red
+      '#ffb703', // Yellow/Gold
+      '#fb8500', // Orange
+      '#8338ec', // Purple
+      '#3a86ff', // Blue
+      '#008000', // Green
+      '#7209b7', // Deep Purple
     ],
 
     // Interactions
@@ -89,14 +88,13 @@ export class ColorSystem {
 
     // Vibrant piece colors for light mode - slightly muted for elegance
     pieceColors: [
-      '#5468d4', // Primary purple
-      '#6651a2', // Deep purple
-      '#d67fb3', // Pink
-      '#d44860', // Coral
-      '#00c550', // Green
-      '#0460c4', // Blue
-      '#d49817', // Gold
-      '#5290dd', // Light blue
+      '#e63946', // Red
+      '#ffb703', // Yellow/Gold
+      '#fb8500', // Orange
+      '#8338ec', // Purple
+      '#3a86ff', // Blue
+      '#008000', // Green
+      '#7209b7', // Deep Purple
     ],
 
     // Interactions

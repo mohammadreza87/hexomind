@@ -67,7 +67,7 @@ const buildGameConfig = (
     roundPixels: false, // Don't round pixels - allow smooth positioning
     transparent: true, // Transparent background to show gradient
     clearBeforeRender: true,
-    preserveDrawingBuffer: false,
+    preserveDrawingBuffer: true,
     premultipliedAlpha: true,
     powerPreference: 'high-performance',
     batchSize: 4096,

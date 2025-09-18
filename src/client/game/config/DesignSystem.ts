@@ -80,8 +80,8 @@ export class DesignSystem {
 
       // Backgrounds
       bgPrimary: '#0a0a0f',
-      bgSecondary: '#13131a',
-      bgTertiary: '#1a1a26',
+      bgSecondary: '#778da9',
+      bgTertiary: '#778da9',
       bgElevated: '#1f1f2e',
 
       // Status colors

@@ -1,6 +1,6 @@
 import express, { type Request } from 'express';
 import { InitResponse, IncrementResponse, DecrementResponse } from '../shared/types/api';
-import { redis, createServer, context } from '@devvit/web/server';
+import { redis, createServer, context, media } from '@devvit/web/server';
 import { createPost, createChallengePost } from './core/post';
 import { handleColormindRequest } from './api/colormind';
 import {
@@ -172,12 +172,11 @@ function resolveRequestIdentity(req: Request): RequestIdentity {
 
 const app = express();
 
-// Middleware for JSON body parsing
-app.use(express.json());
-// Middleware for URL-encoded body parsing
-app.use(express.urlencoded({ extended: true }));
-// Middleware for plain text body parsing
-app.use(express.text());
+// Middleware for body parsing with increased payload limits for screenshot data
+const bodyParserLimit = { limit: '4mb' };
+app.use(express.json(bodyParserLimit));
+app.use(express.urlencoded({ extended: true, ...bodyParserLimit }));
+app.use(express.text(bodyParserLimit));
 
 const router = express.Router();
 
@@ -694,11 +693,29 @@ router.post('/api/commit-username', async (req, res): Promise<void> => {
  */
 router.post('/api/share-challenge', async (req, res): Promise<void> => {
   try {
-    const { score, username, rank, period = 'global' } = req.body;
+    const { score, username, rank, period = 'global', screenshot } = req.body;
 
     if (!score || !username) {
       res.status(400).json({ error: 'Score and username required' });
       return;
+    }
+
+    let screenshotUrl: string | null = null;
+
+    if (typeof screenshot === 'string' && screenshot.startsWith('data:image/')) {
+      if (screenshot.length > 3_000_000) {
+        console.warn('Screenshot payload too large, skipping upload');
+      } else {
+        try {
+          const upload = await media.upload({
+            url: screenshot,
+            type: 'image'
+          });
+          screenshotUrl = upload.mediaUrl;
+        } catch (uploadError) {
+          console.error('Failed to upload challenge screenshot:', uploadError);
+        }
+      }
     }
 
     // Viral title generation with psychological triggers
@@ -743,7 +760,7 @@ router.post('/api/share-challenge', async (req, res): Promise<void> => {
     const title = titleFormats[Math.floor(Math.random() * titleFormats.length)];
 
     // Create the viral challenge post with custom title
-    const post = await createChallengePost(title);
+    const post = await createChallengePost(title, screenshotUrl ?? undefined);
 
     const challengeId = `challenge:${Date.now()}:${username}`;
 
@@ -755,7 +772,8 @@ router.post('/api/share-challenge', async (req, res): Promise<void> => {
       period,
       postId: post.id,
       timestamp: Date.now().toString(),
-      subreddit: context.subredditName || ''
+      subreddit: context.subredditName || '',
+      screenshotUrl: screenshotUrl ?? ''
     });
 
     // Track share analytics (manual increment since hincrby is not available in Devvit)
@@ -793,7 +811,8 @@ router.post('/api/share-challenge', async (req, res): Promise<void> => {
       postUrl: `https://reddit.com/r/${context.subredditName}/comments/${post.id}`,
       challengeId,
       message: '🔥 Challenge posted! Let the games begin!',
-      viralScore: Math.floor(score / 100)
+      viralScore: Math.floor(score / 100),
+      screenshotUrl: screenshotUrl ?? null
     });
 
   } catch (error: any) {
