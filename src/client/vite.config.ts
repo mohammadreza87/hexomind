@@ -9,6 +9,7 @@ export default defineConfig(({ mode }) => {
       react(),
       tailwindcss(),
     ],
+    base: './', // Use relative paths for assets
     build: {
       outDir: '../../dist/client',
       sourcemap: true,

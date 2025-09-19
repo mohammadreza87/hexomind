@@ -40,6 +40,14 @@ export const ShareRescuePanel: React.FC = () => {
     setLoading(true);
     setError(null);
 
+    console.log('[CLIENT SHARE DEBUG] Sharing with screenshot', {
+      hasScreenshot: !!screenshot,
+      screenshotLength: screenshot?.length,
+      screenshotPrefix: screenshot?.substring(0, 50),
+      score,
+      username
+    });
+
     try {
       const response = await fetch('/api/share-challenge', {
         method: 'POST',

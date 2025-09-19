@@ -185,7 +185,7 @@ export class BoardRenderer {
     const dim = radius * 2;
     const base = this.scene.add.image(position.x, position.y, RenderConfig.TEXTURE_KEYS.HEX_BASE_SVG).setOrigin(0.5);
     base.setDisplaySize(dim, dim);
-    base.setAlpha(0.3); // Set initial alpha for empty cell appearance
+    base.setAlpha(0.8); // Increased alpha for better visibility
     // Use theme color instead of hardcoded tint
     const theme = this.themeProvider.getTheme();
     base.setTint(theme.cellEmpty);
@@ -294,7 +294,7 @@ export class BoardRenderer {
     // Base tint (grid) - no alternating colors, no hover
     const bgColor = theme.cellEmpty;
     base.setTint(bgColor);
-    base.setAlpha(0.3);
+    base.setAlpha(0.8);  // Increased from 0.3 to make it more visible
 
     const wasVisible = fill.visible;
 
@@ -355,7 +355,7 @@ export class BoardRenderer {
 
     let rq = Math.round(q);
     let rr = Math.round(r);
-    let rs = Math.round(s);
+    const rs = Math.round(s);
 
     const qDiff = Math.abs(rq - q);
     const rDiff = Math.abs(rr - r);

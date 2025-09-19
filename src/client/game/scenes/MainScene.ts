@@ -80,7 +80,7 @@ export class MainScene extends Phaser.Scene {
       this.load.image(RenderConfig.TEXTURE_KEYS.HEX_FILLED, RenderConfig.ASSETS.HEX_FILLED);
       this.load.image(RenderConfig.TEXTURE_KEYS.HEX_PIECE, RenderConfig.ASSETS.HEX_PIECE);
       // Load SVGs for base (grid) and fill (pieces) with higher resolution
-      this.load.svg(RenderConfig.TEXTURE_KEYS.HEX_BASE_SVG, '/assets/hex-base.svg', { width: 1024, height: 1024 });
+      this.load.svg(RenderConfig.TEXTURE_KEYS.HEX_BASE_SVG, '/assets/hex-simple.svg', { width: 1024, height: 1024 });
       this.load.svg(RenderConfig.TEXTURE_KEYS.HEX_FILL_SVG, '/assets/hex-fill.svg', { width: 1024, height: 1024 });
       // Load glassmorphism piece SVG
       this.load.svg(RenderConfig.TEXTURE_KEYS.HEX_PIECE_GLASS, '/assets/hex-piece-glass.svg', { width: 512, height: 512 });
@@ -95,7 +95,7 @@ export class MainScene extends Phaser.Scene {
       });
     } else if (RenderConfig.USE_SVG_HEXAGONS) {
       // Load SVG assets with high resolution for crisp rendering
-      this.load.svg(RenderConfig.TEXTURE_KEYS.HEX_BASE, '/assets/hex-base.svg', { width: 512, height: 512 });
+      this.load.svg(RenderConfig.TEXTURE_KEYS.HEX_BASE, '/assets/hex-simple.svg', { width: 512, height: 512 });
       this.load.svg(RenderConfig.TEXTURE_KEYS.HEX_FILL, '/assets/hex-fill.svg', { width: 512, height: 512 });
 
       this.load.on('progress', (value: number) => {
@@ -582,6 +582,11 @@ export class MainScene extends Phaser.Scene {
   private captureGameScreenshot(): string | null {
     const canvas = this.game?.canvas as HTMLCanvasElement | undefined;
     if (!canvas || canvas.width === 0 || canvas.height === 0) {
+      console.log('[SCREENSHOT DEBUG] Canvas invalid', {
+        hasCanvas: !!canvas,
+        width: canvas?.width,
+        height: canvas?.height
+      });
       return null;
     }
 
@@ -596,13 +601,25 @@ export class MainScene extends Phaser.Scene {
       outputCanvas.height = targetHeight;
       const context = outputCanvas.getContext('2d');
       if (!context) {
+        console.log('[SCREENSHOT DEBUG] Could not get 2d context');
         return null;
       }
 
       context.drawImage(canvas, 0, 0, targetWidth, targetHeight);
-      return outputCanvas.toDataURL('image/jpeg', 0.85);
+      const dataUrl = outputCanvas.toDataURL('image/jpeg', 0.85);
+
+      console.log('[SCREENSHOT DEBUG] Screenshot captured successfully', {
+        originalWidth: canvas.width,
+        originalHeight: canvas.height,
+        targetWidth,
+        targetHeight,
+        dataUrlLength: dataUrl.length,
+        dataUrlPrefix: dataUrl.substring(0, 50)
+      });
+
+      return dataUrl;
     } catch (error) {
-      console.error('Failed to capture game screenshot:', error);
+      console.error('[SCREENSHOT DEBUG] Failed to capture game screenshot:', error);
       return null;
     }
   }

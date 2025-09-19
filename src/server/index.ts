@@ -1,5 +1,8 @@
 import express, { type Request } from 'express';
 import { randomUUID } from 'node:crypto';
+import { readFileSync, existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { InitResponse, IncrementResponse, DecrementResponse } from '../shared/types/api';
 import { redis, createServer, context, media } from '@devvit/web/server';
 import { createPost, createChallengePost } from './core/post';
@@ -191,6 +194,66 @@ type TransientScreenshot = {
 
 const transientScreenshots = new Map<string, TransientScreenshot>();
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// In Devvit environment, the server runs from /srv, so we need to handle this specially
+// When running locally, it's at dist/server or src/server
+const isDevvitEnvironment = __dirname === '/srv';
+const projectRoot = isDevvitEnvironment ? '' : join(__dirname, '..', '..');
+
+const splashAssetCandidates: Array<{ path: string; mime: string }> = isDevvitEnvironment ? [
+  // For Devvit environment (paths relative to root)
+  { path: '/dist/client/assets/splash-grid.png', mime: 'image/png' },
+  { path: '/dist/client/assets/splash-grid.svg', mime: 'image/svg+xml' },
+  { path: '/dist/client/assets/splash/hex-grid.svg', mime: 'image/svg+xml' },
+  // Try without dist prefix as well
+  { path: '/client/assets/splash-grid.png', mime: 'image/png' },
+  { path: '/client/assets/splash-grid.svg', mime: 'image/svg+xml' },
+  { path: '/assets/splash-grid.png', mime: 'image/png' },
+  { path: '/assets/splash-grid.svg', mime: 'image/svg+xml' },
+] : [
+  // For local development (paths relative to project root)
+  { path: join(projectRoot, 'dist/client/assets/splash-grid.png'), mime: 'image/png' },
+  { path: join(projectRoot, 'dist/client/assets/splash-grid.svg'), mime: 'image/svg+xml' },
+  { path: join(projectRoot, 'dist/client/assets/splash/hex-grid.svg'), mime: 'image/svg+xml' },
+  { path: join(projectRoot, 'src/client/public/assets/splash-grid.png'), mime: 'image/png' },
+  { path: join(projectRoot, 'src/client/public/assets/splash-grid.svg'), mime: 'image/svg+xml' },
+  { path: join(projectRoot, 'src/client/public/assets/splash/hex-grid.svg'), mime: 'image/svg+xml' },
+];
+
+let splashAssetBuffer: Buffer | null = null;
+let splashAssetMime = 'image/png';
+
+// Try to load splash asset, but it's optional
+for (const candidate of splashAssetCandidates) {
+  if (existsSync(candidate.path)) {
+    try {
+      splashAssetBuffer = readFileSync(candidate.path);
+      splashAssetMime = candidate.mime;
+      console.log('[splash] Using splash asset from:', candidate.path);
+      break;
+    } catch (err) {
+      // Continue to next candidate
+    }
+  }
+}
+
+// Only log if we're not in the Devvit environment (to reduce noise)
+if (!splashAssetBuffer && !isDevvitEnvironment) {
+  console.log('[splash] No splash asset found (optional)');
+}
+
+router.get('/internal/assets/splash-grid.png', (_req, res): void => {
+  if (!splashAssetBuffer) {
+    res.status(404).send('Splash asset not available');
+    return;
+  }
+
+  res.set('Cache-Control', 'public, max-age=31536000, immutable');
+  res.type(splashAssetMime).send(splashAssetBuffer);
+});
+
 function storeTransientScreenshot(buffer: Buffer, mime: string): string {
   const id = randomUUID();
   const expiresAt = Date.now() + 5 * 60 * 1000;
@@ -199,13 +262,17 @@ function storeTransientScreenshot(buffer: Buffer, mime: string): string {
   return id;
 }
 
-function getScreenshotUrl(req: Request, id: string): string {
+function getRequestOrigin(req: Request): string {
   const forwardedProto = req.headers['x-forwarded-proto'];
   const protocol = Array.isArray(forwardedProto)
     ? forwardedProto[0]
     : forwardedProto ?? req.protocol;
   const host = req.get('host');
-  return `${protocol}://${host}/share-screenshot/${id}`;
+  return `${protocol}://${host}`;
+}
+
+function getScreenshotUrl(req: Request, id: string): string {
+  return `${getRequestOrigin(req)}/share-screenshot/${id}`;
 }
 
 let leaderboardInitialization: Promise<void> | null = null;
@@ -316,35 +383,60 @@ router.post<{ postId: string }, DecrementResponse | { status: string; message: s
   }
 );
 
-router.post('/internal/on-app-install', async (_req, res): Promise<void> => {
+router.post('/internal/on-app-install', async (req, res): Promise<void> => {
   try {
-    const post = await createPost();
+    // Validate context before proceeding
+    if (!context.subredditName) {
+      console.error('Install error: subredditName not available in context');
+      // For app install triggers, return simple success/error status
+      res.status(200).json({
+        success: false,
+        error: 'Subreddit context not available',
+      });
+      return;
+    }
 
-    res.json({
-      status: 'success',
-      message: `Post created in subreddit ${context.subredditName} with id ${post.id}`,
+    const origin = getRequestOrigin(req);
+    const post = await createPost({ origin });
+
+    res.status(200).json({
+      success: true,
+      postId: post.id,
     });
   } catch (error) {
     console.error(`Error creating post: ${error}`);
-    res.status(400).json({
-      status: 'error',
-      message: 'Failed to create post',
+    // Return status 200 for trigger endpoints as Reddit expects
+    res.status(200).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to create post'
     });
   }
 });
 
-router.post('/internal/menu/post-create', async (_req, res): Promise<void> => {
+router.post('/internal/menu/post-create', async (req, res): Promise<void> => {
   try {
-    const post = await createPost();
+    // Validate context before proceeding
+    if (!context.subredditName) {
+      console.error('Menu action error: subredditName not available in context');
+      // Menu actions must return only valid UI response fields: showToast, navigateTo, or showForm
+      res.status(200).json({
+        showToast: 'Subreddit context not available'
+      });
+      return;
+    }
 
-    res.json({
-      navigateTo: `https://reddit.com/r/${context.subredditName}/comments/${post.id}`,
+    const origin = getRequestOrigin(req);
+    const post = await createPost({ origin });
+
+    // Return only valid UI response fields
+    res.status(200).json({
+      navigateTo: `https://reddit.com/r/${context.subredditName}/comments/${post.id}`
     });
   } catch (error) {
     console.error(`Error creating post: ${error}`);
-    res.status(400).json({
-      status: 'error',
-      message: 'Failed to create post',
+    // For menu actions, use showToast for errors (valid UI response field)
+    res.status(200).json({
+      showToast: error instanceof Error ? `Failed to create post: ${error.message}` : 'Failed to create post'
     });
   }
 });
@@ -732,6 +824,18 @@ router.post('/api/commit-username', async (req, res): Promise<void> => {
  * Share Score Challenge - Viral mechanics for social sharing
  * Creates engaging Reddit posts to drive community challenges
  */
+router.get('/internal/assets/splash-grid.png', (req, res): void => {
+  if (!splashAssetBuffer) {
+    console.error('[splash] No splash asset buffer available');
+    res.status(404).end();
+    return;
+  }
+
+  res.setHeader('Content-Type', splashAssetMime);
+  res.setHeader('Cache-Control', 'public, max-age=3600, immutable');
+  res.send(splashAssetBuffer);
+});
+
 router.get('/share-screenshot/:id', (req, res): void => {
   const { id } = req.params;
   const entry = transientScreenshots.get(id);
@@ -790,45 +894,15 @@ router.get('/api/share-status', async (req, res): Promise<void> => {
 
 router.post('/api/share-challenge', async (req, res): Promise<void> => {
   try {
-    const { score, username, rank, period = 'global', screenshot } = req.body;
+    const { score, username, rank, period = 'global' } = req.body;
 
     if (!score || !username) {
       res.status(400).json({ error: 'Score and username required' });
       return;
     }
 
-    let screenshotUrl: string | null = null;
-
-    const host = req.get('host') ?? '';
-    const isLoopbackHost = /(^|,)(localhost|127\.0\.0\.1)(:|$)/i.test(host);
-
-    if (typeof screenshot === 'string' && screenshot.startsWith('data:image/') && !isLoopbackHost) {
-      const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(screenshot);
-      if (!match) {
-        logger.warn('Invalid screenshot data URI');
-      } else {
-        const [, mime, base64Data] = match;
-        const maxBytes = 2 * 1024 * 1024; // 2MB cap
-        if (base64Data.length * 0.75 > maxBytes) {
-          logger.warn('Screenshot payload too large, skipping upload');
-        } else {
-          try {
-            const buffer = Buffer.from(base64Data, 'base64');
-            const id = storeTransientScreenshot(buffer, mime);
-            const url = getScreenshotUrl(req, id);
-            const upload = await media.upload({
-              url,
-              type: 'image'
-            });
-            screenshotUrl = upload.mediaUrl;
-          } catch (uploadError) {
-            console.error('Failed to upload challenge screenshot:', uploadError);
-          }
-        }
-      }
-    } else if (typeof screenshot === 'string' && isLoopbackHost) {
-      logger.warn('Skipping screenshot upload: cannot reach local development host from Reddit infrastructure');
-    }
+    // Always use hexomind-splash.gif - no screenshot processing needed
+    console.log('[SHARE DEBUG] Using default hexomind-splash.gif for share challenge');
 
     // Viral title generation with psychological triggers
     const getRankEmoji = (rank: number) => {
@@ -871,8 +945,13 @@ router.post('/api/share-challenge', async (req, res): Promise<void> => {
 
     const title = titleFormats[Math.floor(Math.random() * titleFormats.length)];
 
-    // Create the viral challenge post with custom title
-    const post = await createChallengePost(title, screenshotUrl ?? undefined);
+    console.log('[SHARE DEBUG] Creating post', {
+      title
+    });
+
+    // Create the viral challenge post with custom title (always uses hexomind-splash.gif)
+    const origin = getRequestOrigin(req);
+    const post = await createChallengePost(title, undefined, { origin });
 
     const challengeId = `challenge:${Date.now()}:${username}`;
 
@@ -884,8 +963,7 @@ router.post('/api/share-challenge', async (req, res): Promise<void> => {
       period,
       postId: post.id,
       timestamp: Date.now().toString(),
-      subreddit: context.subredditName || '',
-      screenshotUrl: screenshotUrl ?? ''
+      subreddit: context.subredditName || ''
     });
 
     // Track share analytics (manual increment since hincrby is not available in Devvit)

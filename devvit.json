@@ -9,6 +9,9 @@
       }
     }
   },
+  "media": {
+    "dir": "src/client/public/assets"
+  },
   "server": {
     "dir": "dist/server",
     "entry": "index.cjs"

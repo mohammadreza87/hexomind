@@ -44,8 +44,8 @@ export class ColorSystem {
   private readonly NEON_DARK: ColorScheme = {
     // Grid - subtle dark backgrounds from Design System
     gridBackground: DesignSystem.COLORS.solid.bgPrimary,
-    gridCell: DesignSystem.COLORS.solid.bgSecondary,
-    gridCellAlt: DesignSystem.COLORS.solid.bgTertiary,
+    gridCell: '#c8b6ff',
+    gridCellAlt: '#b7a3f3',
     gridBorder: DesignSystem.COLORS.glass.border,
     gridBorderSubtle: DesignSystem.COLORS.glass.background,
 
@@ -81,8 +81,8 @@ export class ColorSystem {
   private readonly MODERN_LIGHT: ColorScheme = {
     // Grid - clean light backgrounds
     gridBackground: '#ffffff',
-    gridCell: '#f0f0f4',
-    gridCellAlt: '#e8e8ec',
+    gridCell: '#c8b6ff',
+    gridCellAlt: '#baa7f7',
     gridBorder: 'rgba(102, 126, 234, 0.15)',
     gridBorderSubtle: 'rgba(102, 126, 234, 0.08)',
 
