@@ -175,6 +175,11 @@ export class PieceTray {
    */
   private enableDrag(renderer: PieceRenderer, piece: PieceModel, slot: PieceSlot): void {
     const container = renderer.getContainer();
+    const getTouchOffset = (pointer: Phaser.Input.Pointer): number => {
+      const pointerType = (pointer as any).pointerType;
+      const isTouchInput = pointer.wasTouch || pointerType === 'touch';
+      return isTouchInput ? -100 : 0;
+    };
 
     // Make interactive with hit area based on slot size
     const hitSize = this.slotSize * 0.8;
@@ -198,9 +203,10 @@ export class PieceTray {
       // Set dragging state (this will scale to normal size)
       renderer.setDragging(true);
 
-      // Center the piece on the pointer immediately
+      // Center the piece on the pointer immediately with touch offset
+      const touchOffset = getTouchOffset(pointer);
       container.x = pointer.x;
-      container.y = pointer.y;
+      container.y = pointer.y + touchOffset;
 
       // Emit event with renderer
       this.scene.events.emit('piece:dragstart', piece, pointer, renderer);
@@ -209,7 +215,7 @@ export class PieceTray {
     // Dragging
     container.on('drag', (pointer: Phaser.Input.Pointer, dragX: number, dragY: number) => {
       // Add offset for touch input so piece appears above finger
-      const touchOffset = pointer.wasTouch ? -80 : 0; // 80 pixels above finger for touch
+      const touchOffset = getTouchOffset(pointer); // Keep piece visible above touch point
 
       // Position piece with offset
       container.x = pointer.x;

@@ -741,8 +741,8 @@ export class MainScene extends Phaser.Scene {
     this.clearPreview();
 
     // Account for touch offset when calculating board position
-    const touchOffset = pointer.wasTouch ? -80 : 0;
-    const adjustedY = pointer.y - touchOffset; // Subtract offset to get actual placement position
+    const touchOffset = this.getPointerTouchOffset(pointer);
+    const adjustedY = pointer.y + touchOffset; // Align preview with visual drag position
 
     // Get board position from adjusted pointer position
     const boardCoords = this.boardRenderer.pixelToHex(pointer.x, adjustedY);
@@ -775,6 +775,12 @@ export class MainScene extends Phaser.Scene {
     this.previewCells = [];
   }
 
+  private getPointerTouchOffset(pointer: Phaser.Input.Pointer): number {
+    const pointerType = (pointer as any).pointerType;
+    const isTouchInput = pointer.wasTouch || pointerType === 'touch';
+    return isTouchInput ? -100 : 0;
+  }
+
   /**
    * Attempt to place piece
    */
@@ -783,8 +789,8 @@ export class MainScene extends Phaser.Scene {
       if (!this.draggedPiece) return false;
 
       // Account for touch offset when calculating board position
-      const touchOffset = pointer.wasTouch ? -80 : 0;
-      const adjustedY = pointer.y - touchOffset; // Subtract offset to get actual placement position
+      const touchOffset = this.getPointerTouchOffset(pointer);
+      const adjustedY = pointer.y + touchOffset; // Align placement with visual drag position
 
       // Get board position from adjusted pointer position
       const boardCoords = this.boardRenderer.pixelToHex(pointer.x, adjustedY);
@@ -1001,8 +1007,8 @@ export class MainScene extends Phaser.Scene {
     // Create main text
     const comboText = this.add.text(centerX, centerY - 50, `COMBO X${combo}`, {
       fontSize: '72px',
-      fontFamily: 'Arial Black',
-      fontStyle: 'bold',
+      fontFamily: DS.getFontFamily('displayBlack'),
+      fontStyle: '900 normal',
       stroke: '#000000',
       strokeThickness: 6
     });

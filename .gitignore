@@ -8,3 +8,11 @@ yarn-error.log*
 .DS_Store
 webroot
 dist
+.cursor
+.cursorignore
+test-*.html
+.env*
+!.env.example
+.idea
+.vscode/settings.json
+package-lock.json
