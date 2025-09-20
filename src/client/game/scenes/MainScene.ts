@@ -570,8 +570,8 @@ export class MainScene extends Phaser.Scene {
       return;
     }
 
+    // Only update score - it will automatically handle highScore in the store
     store.setScore(this.score);
-    store.setHighScore(this.highScore);
 
     const offeredRescue = await this.maybeOfferShareRescue();
     if (!offeredRescue) {
@@ -1081,7 +1081,7 @@ export class MainScene extends Phaser.Scene {
     this.score += points;
     this.scoreText.setText(`Score: ${this.score.toLocaleString()}`);
 
-    // Update React UI
+    // Update React UI - setScore will automatically update highScore if needed
     gameBridge.updateScore(this.score);
 
     // Update high score if needed
@@ -1089,8 +1089,7 @@ export class MainScene extends Phaser.Scene {
       this.highScore = this.score;
       this.highScoreText.setText(`Best: ${this.highScore.toLocaleString()}`);
 
-      // Update React UI
-      gameBridge.updateHighScore(this.highScore);
+      // Don't call updateHighScore here - it's already handled by setScore
 
       // Celebrate new personal record once per run
       if (false) {

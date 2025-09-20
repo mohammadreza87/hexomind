@@ -63,11 +63,19 @@ export const useGameStore = create<GameStore>((set) => ({
 
   // Actions
   setGameState: (state) => set({ gameState: state }),
-  setScore: (score) => set((state) => ({
-    score,
-    highScore: Math.max(score, state.highScore),
-  })),
-  setHighScore: (highScore) => set({ highScore }),
+  setScore: (score) => set((state) => {
+    // Only update highScore through setScore to avoid double updates
+    const newHighScore = Math.max(score, state.highScore);
+    return {
+      score,
+      highScore: newHighScore,
+    };
+  }),
+  setHighScore: (highScore) => set((state) => {
+    // Prevent redundant updates if highScore is already set
+    if (state.highScore === highScore) return state;
+    return { highScore };
+  }),
   setCombo: (combo) => set({ combo }),
   incrementLevel: () => set((state) => ({ level: state.level + 1 })),
   incrementMoves: () => set((state) => ({ moves: state.moves + 1 })),

@@ -40,14 +40,25 @@ export const GameUIOverlay: React.FC<GameUIOverlayProps> = ({
   // Animate score changes
   useEffect(() => {
     if (scoreRef.current && score !== prevScoreRef.current) {
+      // Kill any existing animations on this element first
+      gsap.killTweensOf(scoreRef.current);
+
       const obj = { value: prevScoreRef.current };
+      const targetScore = score;
+
       gsap.to(obj, {
-        value: score,
+        value: targetScore,
         duration: 0.5,
         ease: 'power2.out',
         onUpdate: () => {
           if (scoreRef.current) {
-            scoreRef.current.textContent = Math.floor(obj.value).toString();
+            scoreRef.current.textContent = Math.floor(obj.value).toLocaleString();
+          }
+        },
+        onComplete: () => {
+          // Ensure final value is set correctly
+          if (scoreRef.current) {
+            scoreRef.current.textContent = targetScore.toLocaleString();
           }
         }
       });
@@ -57,15 +68,26 @@ export const GameUIOverlay: React.FC<GameUIOverlayProps> = ({
 
   // Animate high score changes
   useEffect(() => {
-    if (highScoreRef.current && highScore !== prevHighScoreRef.current) {
+    if (highScoreRef.current && highScore !== prevHighScoreRef.current && highScore > 0) {
+      // Kill any existing animations on this element first
+      gsap.killTweensOf(highScoreRef.current);
+
       const obj = { value: prevHighScoreRef.current };
+      const targetHighScore = highScore;
+
       gsap.to(obj, {
-        value: highScore,
+        value: targetHighScore,
         duration: 0.5,
         ease: 'power2.out',
         onUpdate: () => {
           if (highScoreRef.current) {
-            highScoreRef.current.textContent = Math.floor(obj.value).toString();
+            highScoreRef.current.textContent = Math.floor(obj.value).toLocaleString();
+          }
+        },
+        onComplete: () => {
+          // Ensure final value is set correctly
+          if (highScoreRef.current) {
+            highScoreRef.current.textContent = targetHighScore.toLocaleString();
           }
         }
       });
