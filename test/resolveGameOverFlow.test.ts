@@ -121,4 +121,25 @@ describe('resolveGameOverFlowWithStore', () => {
 
     loggerSpy.mockRestore();
   });
+
+  it('logs score sync failures but still transitions to game over', async () => {
+    const mocks = createStoreMocks(4_000);
+    const error = new Error('setScore failed');
+    const loggerSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    mocks.setScore.mockImplementation(() => {
+      throw error;
+    });
+
+    await resolveGameOverFlowWithStore({
+      score: 4_500,
+      storeApi: mocks.storeApi,
+      offerShareRescue: async () => false,
+    });
+
+    expect(mocks.setGameState).toHaveBeenCalledWith('gameOver');
+    expect(loggerSpy).toHaveBeenCalledWith('[GameOverFlow] Failed to sync score during game over flow:', error);
+
+    loggerSpy.mockRestore();
+  });
 });
