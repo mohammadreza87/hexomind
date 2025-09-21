@@ -69,7 +69,7 @@ export const App: React.FC = () => {
       )}
 
       {/* Share to Continue Panel - offered once per day */}
-      {gameState === 'sharePrompt' && shareRescueOffer && (
+      {shareRescueOffer && (
         <ShareRescuePanel />
       )}
 
