@@ -74,7 +74,7 @@ export const App: React.FC = () => {
       )}
 
       {/* Game Over Panel - shown when game ends */}
-      {gameState === 'gameOver' && (
+      {(gameState === 'gameOver' || gameState === 'sharePrompt') && (
         <GameOverPanel
           score={score}
           highScore={highScore}

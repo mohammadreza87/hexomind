@@ -6,7 +6,7 @@ import {
   type LeaderboardViewEntry,
   type LeaderboardViewPeriod,
 } from '../../../services/LeaderboardService';
-import { logger } from '../../../../utils/logger';
+import { logger } from '../../../utils/logger';
 
 type LeaderboardType = LeaderboardViewPeriod;
 
