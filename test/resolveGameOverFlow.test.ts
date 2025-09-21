@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { resolveGameOverFlowWithStore } from '../src/client/game/utils/resolveGameOverFlow';
+import { logger } from '../src/client/utils/logger';
 
 type StoreState = {
   highScore: number;
@@ -76,7 +77,8 @@ describe('resolveGameOverFlowWithStore', () => {
     expect(mocks.setShareRescueOffer).toHaveBeenCalledWith(null);
     expect(mocks.setScore).toHaveBeenCalledWith(1_500);
     expect(mocks.setHighScore).toHaveBeenCalledWith(1_500);
-    expect(mocks.setGameState).toHaveBeenCalledWith('gameOver');
+    expect(mocks.setGameState).toHaveBeenCalledTimes(1);
+    expect(mocks.setGameState).toHaveBeenNthCalledWith(1, 'gameOver');
     expect(mocks.state.highScore).toBe(1_500);
   });
 
@@ -92,7 +94,31 @@ describe('resolveGameOverFlowWithStore', () => {
     expect(mocks.setShareRescueOffer).toHaveBeenCalledWith(null);
     expect(mocks.setScore).toHaveBeenCalledWith(2_750);
     expect(mocks.setHighScore).toHaveBeenCalledWith(2_750);
-    expect(mocks.setGameState).toHaveBeenCalledWith('sharePrompt');
+    expect(mocks.setGameState).toHaveBeenNthCalledWith(1, 'gameOver');
+    expect(mocks.setGameState).toHaveBeenNthCalledWith(2, 'sharePrompt');
     expect(mocks.state.highScore).toBe(2_750);
+  });
+
+  it('logs errors and falls back to game over when share rescue evaluation fails', async () => {
+    const mocks = createStoreMocks(3_000);
+    const error = new Error('network failure');
+    const loggerSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await resolveGameOverFlowWithStore({
+      score: 3_500,
+      storeApi: mocks.storeApi,
+      offerShareRescue: async () => {
+        throw error;
+      },
+    });
+
+    expect(mocks.setShareRescueOffer).toHaveBeenCalledWith(null);
+    expect(mocks.setScore).toHaveBeenCalledWith(3_500);
+    expect(mocks.setHighScore).toHaveBeenCalledWith(3_500);
+    expect(mocks.setGameState).toHaveBeenCalledTimes(1);
+    expect(mocks.setGameState).toHaveBeenCalledWith('gameOver');
+    expect(loggerSpy).toHaveBeenCalledWith('[GameOverFlow] Failed to resolve share rescue offer:', error);
+
+    loggerSpy.mockRestore();
   });
 });

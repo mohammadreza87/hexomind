@@ -568,14 +568,24 @@ export class MainScene extends Phaser.Scene {
   private async resolveGameOverFlow(): Promise<void> {
     const storeApi = window.gameStore;
     if (!storeApi) {
+      logger.error('[GameOverFlow] Game store API unavailable during game over resolution');
       return;
     }
 
-    await resolveGameOverFlowWithStore({
-      score: this.score,
-      storeApi,
-      offerShareRescue: () => this.maybeOfferShareRescue(),
-    });
+    try {
+      await resolveGameOverFlowWithStore({
+        score: this.score,
+        storeApi,
+        offerShareRescue: () => this.maybeOfferShareRescue(),
+      });
+    } catch (error) {
+      logger.error('[GameOverFlow] Unhandled error resolving game over flow:', error);
+      try {
+        storeApi.getState().setGameState('gameOver');
+      } catch (fallbackError) {
+        logger.error('[GameOverFlow] Failed to force game over state after error:', fallbackError);
+      }
+    }
   }
 
   private captureGameScreenshot(): string | null {
