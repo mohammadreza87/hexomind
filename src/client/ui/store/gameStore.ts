@@ -64,15 +64,27 @@ export const useGameStore = create<GameStore>((set) => ({
   // Actions
   setGameState: (state) => set({ gameState: state }),
   setScore: (score) => set((state) => {
-    // Don't update highScore if game is ending to prevent update loops
+    const nextScore = Number.isFinite(score) ? score : state.score;
+
+    // When the game has ended we only keep the final score in sync.
     if (state.gameState === 'gameOver' || state.gameState === 'sharePrompt') {
-      return { score };
+      if (state.score === nextScore) {
+        return state;
+      }
+      return { score: nextScore };
     }
+
+    const nextHighScore = Math.max(nextScore, state.highScore);
+
+    // Bail out early when nothing actually changed to prevent unnecessary updates.
+    if (state.score === nextScore && state.highScore === nextHighScore) {
+      return state;
+    }
+
     // Only update highScore through setScore to avoid double updates
-    const newHighScore = Math.max(score, state.highScore);
     return {
-      score,
-      highScore: newHighScore,
+      score: nextScore,
+      highScore: nextHighScore,
     };
   }),
   setHighScore: (highScore) => set((state) => {
