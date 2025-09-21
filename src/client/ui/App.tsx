@@ -4,7 +4,7 @@ import { MenuSystem } from './components/MenuSystem';
 import { LeaderboardPanel } from './components/LeaderboardPanel';
 import { SettingsPanel } from './components/SettingsPanel';
 import { GameOverPanel } from './components/GameOverPanel';
-import { ShareRescuePanel } from './components/ShareRescuePanel';
+// import { ShareRescuePanel } from './components/ShareRescuePanel'; // DISABLED
 import { NoSpaceToast } from './components/NoSpaceToast';
 import { LineClearPopup } from './components/LineClearPopup';
 import { useGameStore } from './store/gameStore';
@@ -68,10 +68,10 @@ export const App: React.FC = () => {
         />
       )}
 
-      {/* Share to Continue Panel - offered once per day */}
-      {shareRescueOffer && (
+      {/* Share to Continue Panel - DISABLED to prevent conflicts */}
+      {/* {shareRescueOffer && (
         <ShareRescuePanel />
-      )}
+      )} */}
 
       {/* Game Over Panel - shown when game ends */}
       {(gameState === 'gameOver' || gameState === 'sharePrompt') && (

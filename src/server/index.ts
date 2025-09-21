@@ -1157,18 +1157,21 @@ router.post('/api/share-challenge', async (req, res): Promise<void> => {
 // Post comment to Reddit post
 router.post('/api/post-comment', async (req, res): Promise<void> => {
   try {
-    const { score, username, rank, period = 'global' } = req.body;
+    const { score, username, rank, period = 'global', targetPostId } = req.body;
 
-    console.log('[Comment API] Request received:', { score, username, rank, period });
+    console.log('[Comment API] Request received:', { score, username, rank, period, targetPostId });
     console.log('[Comment API] Context:', {
       postId: context.postId,
       subredditName: context.subredditName,
       userId: context.userId
     });
 
-    if (!context.postId) {
-      console.error('[Comment API] No post context available');
-      res.status(400).json({ error: 'No post context available' });
+    // Use targetPostId if provided (for shared posts), otherwise use context.postId
+    const postIdToUse = targetPostId || context.postId;
+
+    if (!postIdToUse) {
+      console.error('[Comment API] No post ID available');
+      res.status(400).json({ error: 'No post ID available' });
       return;
     }
 
@@ -1217,7 +1220,7 @@ router.post('/api/post-comment', async (req, res): Promise<void> => {
     commentText += `---\n\n`;
     commentText += `*Can you beat this score? Play Hexomind now!*`;
 
-    console.log('[Comment API] Attempting to submit comment to post:', context.postId);
+    console.log('[Comment API] Attempting to submit comment to post:', postIdToUse);
     console.log('[Comment API] Comment text:', commentText);
 
     // Check if reddit API is available
@@ -1234,22 +1237,34 @@ router.post('/api/post-comment', async (req, res): Promise<void> => {
     // Try different formats for the post ID
     let comment;
     try {
-      // First try with t3_ prefix
+      // First try with t3_ prefix if not already present
+      const formattedPostId = postIdToUse.startsWith('t3_') ? postIdToUse : `t3_${postIdToUse}`;
+      console.log('[Comment API] Trying with formatted post ID:', formattedPostId);
+
       comment = await reddit.submitComment({
-        id: `t3_${context.postId}`,
+        id: formattedPostId,
         text: commentText
       });
+
+      console.log('[Comment API] Successfully posted with t3_ prefix format');
     } catch (firstError: any) {
       console.error('[Comment API] Failed with t3_ prefix:', firstError?.message);
+      console.error('[Comment API] Error details:', firstError);
 
       // Try without prefix
       try {
+        const cleanPostId = postIdToUse.replace('t3_', '');
+        console.log('[Comment API] Trying without prefix:', cleanPostId);
+
         comment = await reddit.submitComment({
-          id: context.postId,
+          id: cleanPostId,
           text: commentText
         });
+
+        console.log('[Comment API] Successfully posted without prefix');
       } catch (secondError: any) {
         console.error('[Comment API] Failed without prefix:', secondError?.message);
+        console.error('[Comment API] Error details:', secondError);
         throw secondError;
       }
     }

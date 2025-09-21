@@ -634,40 +634,8 @@ export class MainScene extends Phaser.Scene {
   }
 
   private async maybeOfferShareRescue(): Promise<boolean> {
-    if (this.score < 2000) {
-      return false;
-    }
-
-    try {
-      await highScoreService.awaitReady();
-      const username = await highScoreService.getUsername();
-
-      if (shareService.hasShownPromptToday(username)) {
-        logger.debug('Share prompt already shown today for', username);
-        return false;
-      }
-
-      const status = await shareService.getStatus(username, { force: true });
-      window.gameStore?.getState().setShareStatus(status);
-
-      if (status.sharedToday) {
-        logger.debug('User already shared today, skipping rescue prompt');
-        return false;
-      }
-
-      const screenshot = this.captureGameScreenshot();
-      window.gameStore?.getState().setShareRescueOffer({
-        score: this.score,
-        highScore: this.highScore,
-        screenshot,
-        username,
-      });
-      shareService.markPromptShown(username);
-      return true;
-    } catch (error) {
-      console.error('Failed to evaluate share rescue eligibility:', error);
-      return false;
-    }
+    // DISABLED: Share rescue feature disabled to prevent panel conflicts
+    return false;
   }
 
   public continueAfterShareRescue(): void {

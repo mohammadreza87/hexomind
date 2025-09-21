@@ -12,6 +12,9 @@ interface GameStore {
   lineClearPopup: { lines: number; score: number } | null;
   shareRescueOffer: ShareRescueOffer | null;
   shareStatus: ShareStatus;
+  username: string | null;
+  lastSharedPostId: string | null;
+  lastSharedPostUrl: string | null;
 
   // Actions
   setGameState: (state: GameStore['gameState']) => void;
@@ -26,6 +29,8 @@ interface GameStore {
   hideLineClearPopup: () => void;
   setShareRescueOffer: (offer: ShareRescueOffer | null) => void;
   setShareStatus: (status: Partial<ShareStatus>) => void;
+  setUsername: (username: string) => void;
+  setLastSharedPost: (postId: string | null, postUrl: string | null) => void;
 }
 
 export interface ShareStatus {
@@ -60,6 +65,9 @@ export const useGameStore = create<GameStore>((set) => ({
     totalShares: 0,
     lastShareAt: null,
   },
+  username: null,
+  lastSharedPostId: null,
+  lastSharedPostUrl: null,
 
   // Actions
   setGameState: (state) => set({ gameState: state }),
@@ -115,4 +123,9 @@ export const useGameStore = create<GameStore>((set) => ({
       ...status,
     },
   })),
+  setUsername: (username) => set({ username }),
+  setLastSharedPost: (postId, postUrl) => set({
+    lastSharedPostId: postId,
+    lastSharedPostUrl: postUrl
+  }),
 }));

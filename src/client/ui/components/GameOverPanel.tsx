@@ -18,12 +18,13 @@ export const GameOverPanel: React.FC<GameOverPanelProps> = ({
   onTryAgain,
   onShowLeaderboard,
 }) => {
-  const [isVisible, setIsVisible] = useState(false);
   const [isNewHighScore, setIsNewHighScore] = useState(false);
   const [sharing, setSharing] = useState<boolean>(false);
   const [showCommunitySelector, setShowCommunitySelector] = useState<boolean>(false);
   const [postingComment, setPostingComment] = useState<boolean>(false);
   const [commentPosted, setCommentPosted] = useState<boolean>(false);
+
+  const { lastSharedPostId } = useGameStore();
 
   const postScoreToComments = useCallback(async () => {
     if (postingComment || commentPosted) return;
@@ -31,8 +32,12 @@ export const GameOverPanel: React.FC<GameOverPanelProps> = ({
     setPostingComment(true);
 
     try {
-      // Get username from store or use default
-      const username = useGameStore.getState().username || 'Player';
+      // Get username from store
+      const gameState = useGameStore.getState();
+      const username = gameState.username || 'Player';
+      const targetPostId = gameState.lastSharedPostId;
+
+      console.log('[GameOverPanel] Posting comment with targetPostId:', targetPostId);
 
       const response = await fetch('/api/post-comment', {
         method: 'POST',
@@ -43,7 +48,8 @@ export const GameOverPanel: React.FC<GameOverPanelProps> = ({
           score,
           username,
           rank: null, // We don't have rank info here yet
-          period: 'global'
+          period: 'global',
+          targetPostId // Use the shared post if available
         })
       });
 
@@ -109,10 +115,17 @@ export const GameOverPanel: React.FC<GameOverPanelProps> = ({
     }
   }, []);
 
+  // Check for new high score on mount
   useEffect(() => {
-    setIsNewHighScore(score > 0 && score >= highScore);
-    setIsVisible(true);
+    // Check if this is a new high score
+    // Since the store might have already updated highScore, we check if they're equal
+    // and the score is greater than 0
+    const isRecord = score > 0 && score === highScore;
+    setIsNewHighScore(isRecord);
+  }, []); // Only check once on mount
 
+  // Animate panel entrance when component mounts
+  useEffect(() => {
     // Animate panel entrance
     gsap.fromTo(
       '.game-over-panel',
@@ -148,11 +161,7 @@ export const GameOverPanel: React.FC<GameOverPanelProps> = ({
         ease: 'power2.out',
       }
     );
-  }, [score, highScore]);
-
-  if (!isVisible) {
-    return null;
-  }
+  }, []); // Only run animation once when component mounts
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-8 pointer-events-auto">
@@ -312,7 +321,7 @@ export const GameOverPanel: React.FC<GameOverPanelProps> = ({
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                         </svg>
-                        <span>POST SCORE TO COMMENTS</span>
+                        <span>{lastSharedPostId ? 'COMMENT ON SHARED POST' : 'COMMENT SCORE'}</span>
                       </>
                     )}
                   </button>
@@ -358,6 +367,17 @@ export const GameOverPanel: React.FC<GameOverPanelProps> = ({
               if (data.success) {
                 // Close the selector
                 setShowCommunitySelector(false);
+
+                // Save the shared post ID to the store
+                if (data.postId) {
+                  console.log('[GameOverPanel] Saving shared post ID:', data.postId);
+                  useGameStore.getState().setLastSharedPost(data.postId, data.postUrl);
+                  logger.info(`Challenge posted to post ID: ${data.postId}`);
+
+                  // Verify it was saved
+                  const savedPostId = useGameStore.getState().lastSharedPostId;
+                  console.log('[GameOverPanel] Verified saved post ID:', savedPostId);
+                }
 
                 // Animate button success
                 const btn = document.querySelector('.share-gameover-btn');

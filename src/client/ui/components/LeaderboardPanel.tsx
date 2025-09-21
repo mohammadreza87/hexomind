@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { gsap } from 'gsap';
 import { useUIStore } from '../store/uiStore';
+import { useGameStore } from '../store/gameStore';
 import { leaderboardService } from '../../services/LeaderboardService';
 import { highScoreService } from '../../services/HighScoreService';
 import { logger } from '../../utils/logger';
@@ -12,6 +13,7 @@ type LeaderboardType = 'global' | 'daily' | 'weekly';
 
 export const LeaderboardPanel: React.FC = () => {
   const { toggleLeaderboard } = useUIStore();
+  const { lastSharedPostId } = useGameStore();
   const [activeTab, setActiveTab] = useState<LeaderboardType>('global');
   const [entries, setEntries] = useState<LeaderboardViewEntry[]>([]);
   const [currentUser, setCurrentUser] = useState<string>('');
@@ -29,6 +31,11 @@ export const LeaderboardPanel: React.FC = () => {
     setPostingComment(true);
 
     try {
+      // Get the last shared post ID from the store
+      const lastSharedPostId = useGameStore.getState().lastSharedPostId;
+
+      console.log('[LeaderboardPanel] Posting comment with targetPostId:', lastSharedPostId);
+
       const response = await fetch('/api/post-comment', {
         method: 'POST',
         headers: {
@@ -38,7 +45,8 @@ export const LeaderboardPanel: React.FC = () => {
           score,
           username,
           rank,
-          period: activeTab
+          period: activeTab,
+          targetPostId: lastSharedPostId // Use the shared post if available
         })
       });
 
@@ -424,7 +432,7 @@ export const LeaderboardPanel: React.FC = () => {
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                             </svg>
-                            <span>POST TO COMMENTS</span>
+                            <span>{lastSharedPostId ? 'COMMENT ON SHARED' : 'COMMENT SCORE'}</span>
                           </>
                         )}
                       </button>
@@ -515,6 +523,17 @@ export const LeaderboardPanel: React.FC = () => {
                 if (data.success) {
                   // Close the selector
                   setShowCommunitySelector(false);
+
+                  // Save the shared post ID to the store
+                  if (data.postId) {
+                    console.log('[LeaderboardPanel] Saving shared post ID:', data.postId);
+                    useGameStore.getState().setLastSharedPost(data.postId, data.postUrl);
+                    logger.info(`Challenge posted to post ID: ${data.postId}`);
+
+                    // Verify it was saved
+                    const savedPostId = useGameStore.getState().lastSharedPostId;
+                    console.log('[LeaderboardPanel] Verified saved post ID:', savedPostId);
+                  }
 
                   // If in fallback mode, show share dialog
                   if (data.fallbackMode) {

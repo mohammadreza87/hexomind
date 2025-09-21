@@ -70,7 +70,8 @@ export const resolveGameOverFlowWithStore = async ({
     safeStoreCall(() => setHighScore(score), '[GameOverFlow] Failed to update high score from game over flow:');
   }
 
-  if (offeredRescue) {
-    safeStoreCall(() => setGameState('sharePrompt'), '[GameOverFlow] Failed to transition to share prompt state:');
-  }
+  // DISABLED: Share rescue disabled to prevent panel conflicts
+  // if (offeredRescue) {
+  //   safeStoreCall(() => setGameState('sharePrompt'), '[GameOverFlow] Failed to transition to share prompt state:');
+  // }
 };
