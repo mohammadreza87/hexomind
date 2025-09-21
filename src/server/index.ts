@@ -4,7 +4,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { InitResponse, IncrementResponse, DecrementResponse } from '../shared/types/api';
-import { redis, createServer, context, media } from '@devvit/web/server';
+import { redis, createServer, context, media, reddit } from '@devvit/web/server';
 import { createPost, createChallengePost } from './core/post';
 import { handleColormindRequest } from './api/colormind';
 import {
@@ -122,27 +122,46 @@ async function renameUserArtifacts(oldUsername: string | null, newUsername: stri
 
   await moveHash(`highscore:meta:${oldUsername}`, `highscore:meta:${newUsername}`);
 
-  const subredditMetaKeys = await redis.keys(`highscore:meta:${oldUsername}:*`);
-  for (const key of subredditMetaKeys) {
-    const suffix = key.slice(`highscore:meta:${oldUsername}:`.length);
-    await moveHash(key, `highscore:meta:${newUsername}:${suffix}`);
+  // Handle subreddit-specific meta keys (if we have context)
+  if (context.subredditName) {
+    await moveHash(
+      `highscore:meta:${oldUsername}:${context.subredditName}`,
+      `highscore:meta:${newUsername}:${context.subredditName}`
+    );
   }
 
   await updateSortedSetMember('leaderboard:global', oldUsername, newUsername);
 
-  const dailyKeys = await redis.keys('leaderboard:daily:*');
-  for (const key of dailyKeys) {
-    await updateSortedSetMember(key, oldUsername, newUsername);
+  // Update recent daily leaderboards (last 7 days)
+  const today = new Date();
+  for (let i = 0; i < 7; i++) {
+    const date = new Date(today);
+    date.setDate(date.getDate() - i);
+    const dateKey = date.toISOString().split('T')[0];
+    await updateSortedSetMember(`leaderboard:daily:${dateKey}`, oldUsername, newUsername);
   }
 
-  const weeklyKeys = await redis.keys('leaderboard:weekly:*');
-  for (const key of weeklyKeys) {
-    await updateSortedSetMember(key, oldUsername, newUsername);
+  // Update recent weekly leaderboards (last 4 weeks)
+  function getISOWeek(date: Date): number {
+    const tempDate = new Date(date.getTime());
+    tempDate.setHours(0, 0, 0, 0);
+    tempDate.setDate(tempDate.getDate() + 3 - (tempDate.getDay() + 6) % 7);
+    const week1 = new Date(tempDate.getFullYear(), 0, 4);
+    return 1 + Math.round(((tempDate.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
   }
 
-  const subredditKeys = await redis.keys('leaderboard:subreddit:*');
-  for (const key of subredditKeys) {
-    await updateSortedSetMember(key, oldUsername, newUsername);
+  for (let i = 0; i < 4; i++) {
+    const date = new Date(today);
+    date.setDate(date.getDate() - (i * 7));
+    const year = date.getFullYear();
+    const week = getISOWeek(date);
+    const weekKey = `${year}-W${week.toString().padStart(2, '0')}`;
+    await updateSortedSetMember(`leaderboard:weekly:${weekKey}`, oldUsername, newUsername);
+  }
+
+  // Update subreddit leaderboard if we have context
+  if (context.subredditName) {
+    await updateSortedSetMember(`leaderboard:subreddit:${context.subredditName}`, oldUsername, newUsername);
   }
 }
 
@@ -892,9 +911,56 @@ router.get('/api/share-status', async (req, res): Promise<void> => {
   }
 });
 
+router.get('/api/gaming-communities', async (req, res): Promise<void> => {
+  try {
+    // Curated list of gaming communities where Hexomind would be appropriate
+    const communities = [
+      'gaming',
+      'WebGames',
+      'IndieGaming',
+      'casualgames',
+      'browserGames',
+      'puzzlegames',
+      'hexagon',
+      'mobilegaming',
+      'incremental_games',
+      'playmygame',
+      'gamedev',
+      'unity3d',
+      'indiedev',
+      'iosgaming',
+      'AndroidGaming'
+    ];
+
+    // Add user profile option if user is available
+    const userProfileOptions = [];
+    if (context.username) {
+      userProfileOptions.push({
+        id: 'user_profile',
+        label: `u/${context.username} (Your Profile)`,
+        type: 'profile'
+      });
+    }
+
+    res.json({
+      communities: communities.sort(),
+      userProfileOptions,
+      currentUser: context.username,
+      success: true
+    });
+  } catch (error) {
+    console.error('Failed to fetch gaming communities:', error);
+    res.status(500).json({
+      error: 'Failed to fetch communities',
+      communities: [],
+      userProfileOptions: []
+    });
+  }
+});
+
 router.post('/api/share-challenge', async (req, res): Promise<void> => {
   try {
-    const { score, username, rank, period = 'global' } = req.body;
+    const { score, username, rank, period = 'global', targetSubreddit } = req.body;
 
     if (!score || !username) {
       res.status(400).json({ error: 'Score and username required' });
@@ -951,7 +1017,48 @@ router.post('/api/share-challenge', async (req, res): Promise<void> => {
 
     // Create the viral challenge post with custom title (always uses hexomind-splash.gif)
     const origin = getRequestOrigin(req);
-    const post = await createChallengePost(title, undefined, { origin });
+    let useSubreddit = targetSubreddit === 'current' ? context.subredditName : targetSubreddit;
+
+    // Handle user profile sharing
+    if (targetSubreddit === 'user_profile') {
+      useSubreddit = `u_${context.username}`; // Reddit user profile format
+    }
+
+    let post;
+    let actualSubreddit = useSubreddit;
+
+    try {
+      // Try to post to the requested subreddit
+      post = await createChallengePost(title, undefined, {
+        origin,
+        targetSubreddit: useSubreddit,
+        isUserProfile: targetSubreddit === 'user_profile'
+      });
+    } catch (error: any) {
+      // If permission denied, fallback to current subreddit
+      if (error?.code === 7 || error?.details?.includes('not allowed to post')) {
+        console.log(`[SHARE] Permission denied for ${useSubreddit}, falling back to current subreddit`);
+
+        // Only fallback if we weren't already trying the current subreddit
+        if (useSubreddit !== context.subredditName && targetSubreddit !== 'current') {
+          actualSubreddit = context.subredditName;
+          post = await createChallengePost(title, undefined, {
+            origin,
+            targetSubreddit: actualSubreddit,
+            isUserProfile: false
+          });
+
+          // Include a warning in the response
+          res.locals.permissionWarning = `Note: You don't have permission to post to r/${useSubreddit}. The challenge was posted to the current subreddit instead.`;
+        } else {
+          // If we can't even post to current subreddit, throw the error
+          throw error;
+        }
+      } else {
+        // Re-throw non-permission errors
+        throw error;
+      }
+    }
 
     const challengeId = `challenge:${Date.now()}:${username}`;
 
@@ -1000,19 +1107,174 @@ router.post('/api/share-challenge', async (req, res): Promise<void> => {
     res.json({
       success: true,
       postId: post.id,
-      postUrl: `https://reddit.com/r/${context.subredditName}/comments/${post.id}`,
+      postUrl: `https://reddit.com/r/${actualSubreddit}/comments/${post.id}`,
       challengeId,
-      message: '🔥 Challenge posted! Let the games begin!',
+      message: res.locals.permissionWarning || '🔥 Challenge posted! Let the games begin!',
       viralScore: Math.floor(score / 100),
-      screenshotUrl: screenshotUrl ?? null,
-      lastShareAt: now
+      screenshotUrl: null,
+      lastShareAt: now,
+      actualSubreddit: actualSubreddit !== useSubreddit ? actualSubreddit : undefined
     });
 
   } catch (error: any) {
     console.error('Failed to share challenge:', error);
+
+    // If we can't post anywhere, generate a shareable link instead
+    if (error?.code === 7 || error?.details?.includes('not allowed to post')) {
+      // Generate a share URL that can be copied and pasted
+      const shareableUrl = `https://reddit.com/r/hexomind?challenge=${encodeURIComponent(JSON.stringify({
+        score: req.body.score,
+        username: req.body.username,
+        rank: req.body.rank,
+        period: req.body.period || 'global'
+      }))}`;
+
+      // Generate social media text
+      const tweetText = encodeURIComponent(`🔥 I just scored ${req.body.score.toLocaleString()} points in #Hexomind! Can you beat my score? 🎮`);
+      const twitterUrl = `https://twitter.com/intent/tweet?text=${tweetText}`;
+
+      res.json({
+        success: true,
+        fallbackMode: true,
+        message: 'Generated shareable links - copy and share anywhere!',
+        shareableUrl,
+        twitterUrl,
+        shareText: `Challenge: Beat my score of ${req.body.score.toLocaleString()}!`,
+        score: req.body.score,
+        username: req.body.username,
+        rank: req.body.rank
+      });
+      return;
+    }
+
     res.status(500).json({
       error: 'Failed to create challenge',
       details: error?.message
+    });
+  }
+});
+
+// Post comment to Reddit post
+router.post('/api/post-comment', async (req, res): Promise<void> => {
+  try {
+    const { score, username, rank, period = 'global' } = req.body;
+
+    console.log('[Comment API] Request received:', { score, username, rank, period });
+    console.log('[Comment API] Context:', {
+      postId: context.postId,
+      subredditName: context.subredditName,
+      userId: context.userId
+    });
+
+    if (!context.postId) {
+      console.error('[Comment API] No post context available');
+      res.status(400).json({ error: 'No post context available' });
+      return;
+    }
+
+    if (!score || !username) {
+      console.error('[Comment API] Missing required fields');
+      res.status(400).json({ error: 'Score and username required' });
+      return;
+    }
+
+    // Format the comment text
+    const getScoreLevel = (score: number) => {
+      if (score >= 50000) return '🏆 GODLIKE';
+      if (score >= 25000) return '⭐ LEGENDARY';
+      if (score >= 10000) return '🎯 MASTER';
+      if (score >= 5000) return '💪 EXPERT';
+      if (score >= 2500) return '🔥 PRO';
+      if (score >= 1000) return '✨ SKILLED';
+      if (score >= 500) return '🌟 RISING STAR';
+      return '🎮 CHALLENGER';
+    };
+
+    const getRankEmoji = (rank: number) => {
+      if (rank === 1) return '👑';
+      if (rank === 2) return '🥈';
+      if (rank === 3) return '🥉';
+      if (rank <= 10) return '🔥';
+      if (rank <= 25) return '⭐';
+      return '🎯';
+    };
+
+    const level = getScoreLevel(score);
+    const rankEmoji = rank ? getRankEmoji(rank) : '';
+    const formattedScore = score.toLocaleString();
+
+    let commentText = `## ${level} Score!\n\n`;
+    commentText += `**Player:** ${username}\n\n`;
+    commentText += `**Score:** ${formattedScore} points\n\n`;
+
+    if (rank) {
+      const periodLabel = period === 'daily' ? 'Daily' :
+                         period === 'weekly' ? 'Weekly' :
+                         period === 'subreddit' ? 'Subreddit' : 'Global';
+      commentText += `**${periodLabel} Rank:** #${rank} ${rankEmoji}\n\n`;
+    }
+
+    commentText += `---\n\n`;
+    commentText += `*Can you beat this score? Play Hexomind now!*`;
+
+    console.log('[Comment API] Attempting to submit comment to post:', context.postId);
+    console.log('[Comment API] Comment text:', commentText);
+
+    // Check if reddit API is available
+    if (!reddit || !reddit.submitComment) {
+      console.error('[Comment API] Reddit API not available or submitComment method missing');
+      res.status(503).json({
+        error: 'Reddit API not available',
+        message: 'Comment feature is currently unavailable'
+      });
+      return;
+    }
+
+    // Submit the comment to the Reddit post
+    // Try different formats for the post ID
+    let comment;
+    try {
+      // First try with t3_ prefix
+      comment = await reddit.submitComment({
+        id: `t3_${context.postId}`,
+        text: commentText
+      });
+    } catch (firstError: any) {
+      console.error('[Comment API] Failed with t3_ prefix:', firstError?.message);
+
+      // Try without prefix
+      try {
+        comment = await reddit.submitComment({
+          id: context.postId,
+          text: commentText
+        });
+      } catch (secondError: any) {
+        console.error('[Comment API] Failed without prefix:', secondError?.message);
+        throw secondError;
+      }
+    }
+
+    console.log('[Comment API] Comment posted successfully:', comment?.id);
+
+    res.json({
+      success: true,
+      message: 'Score posted to comments!',
+      commentId: comment?.id || 'unknown'
+    });
+
+  } catch (error: any) {
+    console.error('[Comment API] Failed to post comment:', error);
+    console.error('[Comment API] Error details:', {
+      message: error?.message,
+      code: error?.code,
+      statusCode: error?.statusCode,
+      stack: error?.stack
+    });
+
+    res.status(500).json({
+      error: 'Failed to post comment',
+      details: error?.message || 'Unknown error',
+      code: error?.code
     });
   }
 });

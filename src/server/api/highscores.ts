@@ -300,24 +300,34 @@ export async function resetUserHighScore(username: string): Promise<void> {
 
     await redis.zRem(GLOBAL_REAL_KEY, [username]);
 
-    const dailyKeys = await redis.keys('leaderboard:daily:*');
-    const weeklyKeys = await redis.keys('leaderboard:weekly:*');
-    const subredditKeys = await redis.keys('leaderboard:subreddit:*');
-
+    // Since redis.keys is not available in Devvit, we need to handle known keys differently
+    // We'll remove the user from current and recent leaderboards
     const removals: Promise<unknown>[] = [];
 
-    dailyKeys
-      .filter(key => !key.endsWith(':fake'))
-      .forEach(key => removals.push(redis.zRem(key, [username])));
+    // Remove from current and recent daily leaderboards (last 7 days)
+    const today = new Date();
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      const dateKey = date.toISOString().split('T')[0];
+      removals.push(redis.zRem(`leaderboard:daily:${dateKey}`, [username]));
+    }
 
-    weeklyKeys
-      .filter(key => !key.endsWith(':fake'))
-      .forEach(key => removals.push(redis.zRem(key, [username])));
+    // Remove from current and recent weekly leaderboards (last 4 weeks)
+    for (let i = 0; i < 4; i++) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - (i * 7));
+      const year = date.getFullYear();
+      const week = getISOWeek(date);
+      const weekKey = `${year}-W${week.toString().padStart(2, '0')}`;
+      removals.push(redis.zRem(`leaderboard:weekly:${weekKey}`, [username]));
+    }
 
-    subredditKeys.forEach(key => removals.push(redis.zRem(key, [username])));
-
-    const subredditMetaKeys = await redis.keys(`highscore:meta:${username}:*`);
-    subredditMetaKeys.forEach(key => removals.push(redis.del(key)));
+    // Remove from known subreddit leaderboards (if we have context)
+    if (typeof context !== 'undefined' && context.subredditName) {
+      removals.push(redis.zRem(`leaderboard:subreddit:${context.subredditName}`, [username]));
+      removals.push(redis.del(`highscore:meta:${username}:${context.subredditName}`));
+    }
 
     await Promise.all(removals);
   } catch (error) {
