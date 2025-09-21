@@ -1,3 +1,5 @@
+import { logger } from '../../utils/logger';
+
 export type GameStateValue = 'idle' | 'playing' | 'paused' | 'gameOver' | 'sharePrompt';
 
 interface GameStoreState {
@@ -33,12 +35,26 @@ export const resolveGameOverFlowWithStore = async ({
   setShareRescueOffer(null);
   setScore(score);
 
-  const offeredRescue = await offerShareRescue();
+  // Ensure the UI transitions to the game over state immediately so the panel is shown
+  setGameState('gameOver');
 
-  const latestState = storeApi.getState();
-  if (score > latestState.highScore) {
-    setHighScore(score);
+  let offeredRescue = false;
+  try {
+    offeredRescue = await offerShareRescue();
+  } catch (error) {
+    logger.error('[GameOverFlow] Failed to resolve share rescue offer:', error);
   }
 
-  setGameState(offeredRescue ? 'sharePrompt' : 'gameOver');
+  try {
+    const latestState = storeApi.getState();
+    if (score > latestState.highScore) {
+      setHighScore(score);
+    }
+  } catch (error) {
+    logger.error('[GameOverFlow] Failed to update high score from game over flow:', error);
+  }
+
+  if (offeredRescue) {
+    setGameState('sharePrompt');
+  }
 };
