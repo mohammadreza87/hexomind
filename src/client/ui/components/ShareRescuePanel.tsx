@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { shareService } from '../../services/ShareService';
 import { useGameStore } from '../store/gameStore';
+import { CommunitySelector } from './CommunitySelector';
 
 export const ShareRescuePanel: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showCommunitySelector, setShowCommunitySelector] = useState(false);
 
   const {
     shareRescueOffer,
@@ -35,7 +37,7 @@ export const ShareRescuePanel: React.FC = () => {
     setGameState('gameOver');
   };
 
-  const handleShare = async () => {
+  const handleShare = async (targetSubreddit?: string) => {
     if (loading) return;
     setLoading(true);
     setError(null);
@@ -45,7 +47,8 @@ export const ShareRescuePanel: React.FC = () => {
       screenshotLength: screenshot?.length,
       screenshotPrefix: screenshot?.substring(0, 50),
       score,
-      username
+      username,
+      targetSubreddit
     });
 
     try {
@@ -60,6 +63,7 @@ export const ShareRescuePanel: React.FC = () => {
           rank: 999,
           period: 'global',
           screenshot,
+          targetSubreddit,
         }),
       });
 
@@ -111,7 +115,7 @@ export const ShareRescuePanel: React.FC = () => {
               border: '1px solid rgba(255, 255, 255, 0.15)'
             }}
           >
-            <div className="space-y-6" style={{ padding: '2rem 2.5rem' }}>
+            <div className="space-y-6" style={{padding: '2rem 2.5rem'}}>
               <div className="text-center space-y-3">
                 <h2 className="text-3xl font-bold text-white">
                   Continue Your Run?
@@ -148,7 +152,10 @@ export const ShareRescuePanel: React.FC = () => {
 
               <div className="flex flex-col gap-3">
                 <button
-                  onClick={handleShare}
+                  onClick={() => {
+                    if (loading) return;
+                    setShowCommunitySelector(true);
+                  }}
                   disabled={loading}
                   className={`w-full py-3 px-4 rounded-xl bg-gradient-to-r from-orange-500 to-pink-500 text-white font-semibold text-sm tracking-wide shadow-lg flex items-center justify-center gap-2 transition-all duration-200 ${
                     loading ? 'opacity-60 cursor-not-allowed' : 'hover:shadow-xl hover:scale-105 active:scale-95'
@@ -178,6 +185,18 @@ export const ShareRescuePanel: React.FC = () => {
         <div className="absolute -top-6 -left-10 w-20 h-20 bg-orange-400/20 rounded-full blur-3xl" />
         <div className="absolute -bottom-8 -right-12 w-24 h-24 bg-pink-500/20 rounded-full blur-3xl" />
       </div>
+
+      {/* Community Selector Modal */}
+      {showCommunitySelector && (
+        <CommunitySelector
+          onCancel={() => setShowCommunitySelector(false)}
+          isLoading={loading}
+          onShare={async (targetSubreddit) => {
+            setShowCommunitySelector(false);
+            await handleShare(targetSubreddit);
+          }}
+        />
+      )}
     </div>
   );
 };

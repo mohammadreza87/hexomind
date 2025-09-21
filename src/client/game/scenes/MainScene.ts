@@ -570,12 +570,22 @@ export class MainScene extends Phaser.Scene {
       return;
     }
 
-    // Only update score - it will automatically handle highScore in the store
-    store.setScore(this.score);
+    // Update high score first if needed, separately from score
+    if (this.score > store.highScore) {
+      store.setHighScore(this.score);
+    }
 
+    // Check if we should offer rescue before setting gameOver
     const offeredRescue = await this.maybeOfferShareRescue();
+
     if (!offeredRescue) {
+      // Set game state to gameOver first
       store.setGameState('gameOver');
+      // Then update the final score (won't trigger highScore update due to gameOver state)
+      store.setScore(this.score);
+    } else {
+      // For share rescue, just update score
+      store.setScore(this.score);
     }
   }
 

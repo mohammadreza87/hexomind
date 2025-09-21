@@ -4,6 +4,8 @@ import { useUIStore } from '../store/uiStore';
 import { leaderboardService } from '../../services/LeaderboardService';
 import { highScoreService } from '../../services/HighScoreService';
 import { logger } from '../../utils/logger';
+import { CommunitySelector } from './CommunitySelector';
+import { ShareDialog } from './ShareDialog';
 import type { LeaderboardViewEntry, LeaderboardViewPeriod } from '../../services/LeaderboardService';
 
 type LeaderboardType = 'global' | 'daily' | 'weekly';
@@ -16,6 +18,55 @@ export const LeaderboardPanel: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [sharing, setSharing] = useState<boolean>(false);
+  const [showCommunitySelector, setShowCommunitySelector] = useState<boolean>(false);
+  const [showShareDialog, setShowShareDialog] = useState<any>(null);
+  const [postingComment, setPostingComment] = useState<boolean>(false);
+  const [commentPosted, setCommentPosted] = useState<boolean>(false);
+
+  const postScoreToComments = useCallback(async (score: number, username: string, rank: number) => {
+    if (postingComment || commentPosted) return;
+
+    setPostingComment(true);
+
+    try {
+      const response = await fetch('/api/post-comment', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          score,
+          username,
+          rank,
+          period: activeTab
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setCommentPosted(true);
+        logger.info('Score posted to comments!');
+
+        // Show success animation
+        const btn = document.querySelector('.comment-leaderboard-btn');
+        if (btn) {
+          btn.classList.add('comment-success');
+        }
+      } else {
+        logger.error('Failed to post comment:', data.error || data.details);
+
+        // Check if it's because Reddit API is not available
+        if (data.error === 'Reddit API not available') {
+          logger.info('Comment feature is currently unavailable in development mode');
+        }
+      }
+    } catch (error) {
+      logger.error('Error posting comment:', error);
+    } finally {
+      setPostingComment(false);
+    }
+  }, [activeTab, postingComment, commentPosted]);
 
   const captureGameScreenshot = useCallback((): string | null => {
     if (typeof window === 'undefined') {
@@ -313,53 +364,11 @@ export const LeaderboardPanel: React.FC = () => {
 
                       {/* Viral Share Button with smooth bump animation */}
                       <button
-                        onClick={async () => {
+                        onClick={() => {
                           if (sharing) {
                             return;
                           }
-
-                          setSharing(true);
-
-                          const screenshot = captureGameScreenshot();
-
-                          try {
-                            const response = await fetch('/api/share-challenge', {
-                              method: 'POST',
-                              headers: {
-                                'Content-Type': 'application/json',
-                              },
-                              body: JSON.stringify({
-                                score: mine.score,
-                                username: mine.username,
-                                rank: mine.rank,
-                                period: activeTab,
-                                screenshot
-                              })
-                            });
-
-                            const data = await response.json();
-
-                            if (data.success) {
-                              // Animate button success
-                              const btn = document.querySelector('.share-challenge-btn');
-                              if (btn) {
-                                btn.classList.add('share-success');
-                                setTimeout(() => btn.classList.remove('share-success'), 2000);
-                              }
-
-                              // Open the Reddit post in new tab
-                              if (data.postUrl) {
-                                window.open(data.postUrl, '_blank');
-                              }
-
-                              // Show success message
-                              logger.info(data.message);
-                            }
-                          } catch (error) {
-                            console.error('Failed to share challenge:', error);
-                          } finally {
-                            setSharing(false);
-                          }
+                          setShowCommunitySelector(true);
                         }}
                         className={`share-challenge-btn w-full py-3 px-4 rounded-xl bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600 text-white font-bold text-sm tracking-wider transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl flex items-center justify-center gap-2 group animate-bump ${
                           sharing ? 'opacity-60 cursor-not-allowed hover:scale-100' : ''
@@ -383,6 +392,41 @@ export const LeaderboardPanel: React.FC = () => {
                         <span className="text-xs opacity-75">
                           (#{mine.rank})
                         </span>
+                      </button>
+
+                      {/* Post to Comments Button */}
+                      <button
+                        onClick={() => postScoreToComments(mine.score, mine.username, mine.rank)}
+                        disabled={postingComment || commentPosted}
+                        className={`comment-leaderboard-btn w-full py-3 px-4 rounded-xl bg-gradient-to-r from-blue-500/20 to-purple-500/20 backdrop-blur-sm text-blue-400 font-bold text-sm hover:bg-blue-500/30 transform transition-all duration-200 hover:scale-105 active:scale-95 flex items-center justify-center gap-2 ${
+                          postingComment ? 'opacity-60 cursor-wait' : ''
+                        } ${
+                          commentPosted ? 'bg-green-500/20 hover:bg-green-500/30 text-green-400' : ''
+                        }`}
+                      >
+                        {commentPosted ? (
+                          <>
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                            <span>POSTED!</span>
+                          </>
+                        ) : postingComment ? (
+                          <>
+                            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <span>POSTING...</span>
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                            </svg>
+                            <span>POST TO COMMENTS</span>
+                          </>
+                        )}
                       </button>
 
                       <style jsx>{`
@@ -427,6 +471,90 @@ export const LeaderboardPanel: React.FC = () => {
         <div className="absolute -top-8 -left-8 w-16 h-16 bg-purple-500/20 rounded-full blur-2xl" />
         <div className="absolute -bottom-8 -right-8 w-16 h-16 bg-cyan-500/20 rounded-full blur-2xl" />
       </div>
+
+      {/* Share Dialog */}
+      {showShareDialog && (
+        <ShareDialog
+          {...showShareDialog}
+          onClose={() => setShowShareDialog(null)}
+        />
+      )}
+
+      {/* Community Selector Modal */}
+      {showCommunitySelector && entries.length > 0 && (() => {
+        const mine = entries.find(entry => entry.username === currentUser);
+        if (!mine) return null;
+
+        return (
+          <CommunitySelector
+            onCancel={() => setShowCommunitySelector(false)}
+            isLoading={sharing}
+            onShare={async (targetSubreddit) => {
+              setSharing(true);
+
+              try {
+                const screenshot = captureGameScreenshot();
+
+                const response = await fetch('/api/share-challenge', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    score: mine.score,
+                    username: mine.username,
+                    rank: mine.rank,
+                    period: activeTab,
+                    targetSubreddit,
+                    screenshot
+                  })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                  // Close the selector
+                  setShowCommunitySelector(false);
+
+                  // If in fallback mode, show share dialog
+                  if (data.fallbackMode) {
+                    setShowShareDialog({
+                      shareText: data.shareText,
+                      shareableUrl: data.shareableUrl,
+                      twitterUrl: data.twitterUrl,
+                      score: mine.score,
+                      username: mine.username
+                    });
+                  } else {
+                    // Animate button success
+                    const btn = document.querySelector('.share-challenge-btn');
+                    if (btn) {
+                      btn.classList.add('share-success');
+                      setTimeout(() => btn.classList.remove('share-success'), 2000);
+                    }
+
+                    // Log the URL instead of opening (sandbox restrictions)
+                    if (data.postUrl) {
+                      logger.info(`Challenge posted! View at: ${data.postUrl}`);
+                    }
+
+                    // Show success message or warning
+                    if (data.actualSubreddit) {
+                      logger.warn(`Shared to current subreddit - Hexomind needs to be installed in r/${targetSubreddit} to post there`);
+                    } else {
+                      logger.info(data.message || 'Challenge shared successfully!');
+                    }
+                  }
+                }
+              } catch (error) {
+                console.error('Failed to share challenge:', error);
+              } finally {
+                setSharing(false);
+              }
+            }}
+          />
+        );
+      })()}
     </div>
   );
 };

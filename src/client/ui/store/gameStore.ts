@@ -64,6 +64,10 @@ export const useGameStore = create<GameStore>((set) => ({
   // Actions
   setGameState: (state) => set({ gameState: state }),
   setScore: (score) => set((state) => {
+    // Don't update highScore if game is ending to prevent update loops
+    if (state.gameState === 'gameOver' || state.gameState === 'sharePrompt') {
+      return { score };
+    }
     // Only update highScore through setScore to avoid double updates
     const newHighScore = Math.max(score, state.highScore);
     return {

@@ -2,6 +2,8 @@ import { context, reddit } from '@devvit/web/server';
 
 interface CreatePostOptions {
   origin?: string;
+  targetSubreddit?: string;
+  isUserProfile?: boolean;
 }
 
 const baseSplashConfig = {
@@ -44,12 +46,14 @@ export const createChallengePost = async (
   _screenshotUrl?: string, // Keep for backward compatibility but unused
   options?: CreatePostOptions
 ) => {
-  const { subredditName } = context;
+  // Use targetSubreddit if provided, otherwise use context subreddit
+  const subredditName = options?.targetSubreddit || context.subredditName;
+
   if (!subredditName) {
     throw new Error('subredditName is required');
   }
 
-  // Always use hexomind-splash.png via baseSplashConfig
+  // Always use hexomind-splash.gif via baseSplashConfig
   return await reddit.submitCustomPost({
     splash: baseSplashConfig,
     textFallback: {
