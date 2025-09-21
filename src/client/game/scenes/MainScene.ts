@@ -572,11 +572,10 @@ export class MainScene extends Phaser.Scene {
 
     // Only update score - it will automatically handle highScore in the store
     store.setScore(this.score);
+    store.setShareRescueOffer(null);
+    store.setGameState('gameOver');
 
-    const offeredRescue = await this.maybeOfferShareRescue();
-    if (!offeredRescue) {
-      store.setGameState('gameOver');
-    }
+    await this.maybeOfferShareRescue();
   }
 
   private captureGameScreenshot(): string | null {
@@ -654,7 +653,6 @@ export class MainScene extends Phaser.Scene {
         username,
       });
       shareService.markPromptShown(username);
-      window.gameStore?.getState().setGameState('sharePrompt');
       return true;
     } catch (error) {
       console.error('Failed to evaluate share rescue eligibility:', error);
@@ -709,7 +707,7 @@ export class MainScene extends Phaser.Scene {
       });
 
       store.setShowNoSpaceToast(false);
-      store.setGameState('sharePrompt');
+      store.setGameState('gameOver');
     } catch (error) {
       console.error('Failed to trigger share rescue test:', error);
     }
