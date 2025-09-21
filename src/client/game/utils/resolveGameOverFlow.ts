@@ -25,18 +25,35 @@ export const resolveGameOverFlowWithStore = async ({
   storeApi,
   offerShareRescue,
 }: ResolveGameOverFlowOptions): Promise<void> => {
+  let storeState: GameStoreState;
+  try {
+    storeState = storeApi.getState();
+  } catch (error) {
+    logger.error('[GameOverFlow] Unable to access game store state during game over flow:', error);
+    return;
+  }
+
   const {
     setScore,
     setHighScore,
     setGameState,
     setShareRescueOffer,
-  } = storeApi.getState();
+  } = storeState;
 
-  setShareRescueOffer(null);
-  setScore(score);
+  const safeStoreCall = <T>(action: () => T, message: string): T | undefined => {
+    try {
+      return action();
+    } catch (error) {
+      logger.error(message, error);
+      return undefined;
+    }
+  };
+
+  safeStoreCall(() => setShareRescueOffer(null), '[GameOverFlow] Failed to reset share rescue offer during game over flow:');
+  safeStoreCall(() => setScore(score), '[GameOverFlow] Failed to sync score during game over flow:');
 
   // Ensure the UI transitions to the game over state immediately so the panel is shown
-  setGameState('gameOver');
+  safeStoreCall(() => setGameState('gameOver'), '[GameOverFlow] Failed to transition to game over state:');
 
   let offeredRescue = false;
   try {
@@ -45,16 +62,12 @@ export const resolveGameOverFlowWithStore = async ({
     logger.error('[GameOverFlow] Failed to resolve share rescue offer:', error);
   }
 
-  try {
-    const latestState = storeApi.getState();
-    if (score > latestState.highScore) {
-      setHighScore(score);
-    }
-  } catch (error) {
-    logger.error('[GameOverFlow] Failed to update high score from game over flow:', error);
+  const latestState = safeStoreCall(() => storeApi.getState(), '[GameOverFlow] Failed to read latest store state during game over flow:');
+  if (latestState && score > latestState.highScore) {
+    safeStoreCall(() => setHighScore(score), '[GameOverFlow] Failed to update high score from game over flow:');
   }
 
   if (offeredRescue) {
-    setGameState('sharePrompt');
+    safeStoreCall(() => setGameState('sharePrompt'), '[GameOverFlow] Failed to transition to share prompt state:');
   }
 };
