@@ -92,9 +92,7 @@ export function normalizeLeaderboardPayload(
   });
 
   normalized.forEach((entry, index) => {
-    if (!Number.isFinite(entry.rank) || entry.rank <= 0) {
-      entry.rank = index + 1;
-    }
+    entry.rank = index + 1;
     entry.isCurrentUser = entry.username === currentUsername;
   });
 

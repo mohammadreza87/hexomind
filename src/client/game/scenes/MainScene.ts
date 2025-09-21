@@ -19,6 +19,7 @@ import { GameStateManager } from '../services/GameStateManager';
 import { ResponsiveMetrics, measureResponsiveViewport } from '../responsive';
 import { gameBridge } from '../../ui/GameBridge';
 import { shareService } from '../../services/ShareService';
+import { resolveGameOverFlowWithStore } from '../utils/resolveGameOverFlow';
 // Asset URLs (bundled by Vite) - commented out for now since SVG not available
 // import hexSvgUrl from '../../assets/images/hex.svg';
 
@@ -565,35 +566,16 @@ export class MainScene extends Phaser.Scene {
   }
 
   private async resolveGameOverFlow(): Promise<void> {
-    const store = window.gameStore?.getState();
-    if (!store) {
+    const storeApi = window.gameStore;
+    if (!storeApi) {
       return;
     }
 
-
-    // Only update score - it will automatically handle highScore in the store
-    store.setScore(this.score);
-    store.setShareRescueOffer(null);
-    store.setGameState('gameOver');
-
-    await this.maybeOfferShareRescue();
-    // Update high score first if needed, separately from score
-    if (this.score > store.highScore) {
-      store.setHighScore(this.score);
-    }
-
-    // Check if we should offer rescue before setting gameOver
-    const offeredRescue = await this.maybeOfferShareRescue();
-
-    if (!offeredRescue) {
-      // Set game state to gameOver first
-      store.setGameState('gameOver');
-      // Then update the final score (won't trigger highScore update due to gameOver state)
-      store.setScore(this.score);
-    } else {
-      // For share rescue, just update score
-      store.setScore(this.score);
-    }
+    await resolveGameOverFlowWithStore({
+      score: this.score,
+      storeApi,
+      offerShareRescue: () => this.maybeOfferShareRescue(),
+    });
   }
 
   private captureGameScreenshot(): string | null {
