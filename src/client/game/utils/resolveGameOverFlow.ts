@@ -50,10 +50,13 @@ export const resolveGameOverFlowWithStore = async ({
   };
 
   safeStoreCall(() => setShareRescueOffer(null), '[GameOverFlow] Failed to reset share rescue offer during game over flow:');
-  safeStoreCall(() => setScore(score), '[GameOverFlow] Failed to sync score during game over flow:');
 
-  // Ensure the UI transitions to the game over state immediately so the panel is shown
+  // Mark the game as over before syncing score/high score so store reactions can't
+  // re-enter this flow while we update values. This prevents React from bouncing
+  // between "playing" and "gameOver" when a new personal record is set.
   safeStoreCall(() => setGameState('gameOver'), '[GameOverFlow] Failed to transition to game over state:');
+
+  safeStoreCall(() => setScore(score), '[GameOverFlow] Failed to sync score during game over flow:');
 
   let offeredRescue = false;
   try {
